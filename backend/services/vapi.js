@@ -223,11 +223,8 @@ async function makeVapiCall(lead) {
     body.assistantOverrides = {
       recordingEnabled: true,
       firstMessage: firstMessage,
-      model: {
-        provider: "openai",
-        model: "gpt-4o-mini",
-        systemPrompt: systemPrompt
-      },
+      serverUrl: webhookUrl,
+      server: { url: webhookUrl, timeoutSeconds: 20 },
       variableValues: {
         nome_cliente: lead.name,
         valor_fatura: valorFaturaText,
@@ -242,6 +239,8 @@ async function makeVapiCall(lead) {
     body.assistant = {
       name: "Verô - Vero Cobrança",
       firstMessage: firstMessage,
+      serverUrl: webhookUrl,
+      server: { url: webhookUrl, timeoutSeconds: 20 },
       model: {
         provider: "openai",
         model: "gpt-4o-mini",
