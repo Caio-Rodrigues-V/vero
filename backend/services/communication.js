@@ -107,7 +107,7 @@ async function triggerUnipixSms(lead) {
  */
 async function sendLocawebEmail(lead) {
   const token = process.env.LOCAWEB_TOKEN || '45790aba479f30ec65f106995d8e7424';
-  const fromName = process.env.LOCAWEB_FROM_NAME || 'Grupo DDM';
+  const fromName = process.env.LOCAWEB_FROM_NAME || 'Vero Internet';
   const fromEmail = process.env.LOCAWEB_FROM || 'comunicado@envios.ddm.adv.br';
   const apiUrl = 'https://api.smtplw.com.br/v1/messages';
 
@@ -132,7 +132,7 @@ async function sendLocawebEmail(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
-  // Template HTML adaptado para a Vero Internet / Grupo DDM
+  // Template HTML adaptado para a Vero Internet
   const htmlBody = `
 <!DOCTYPE html>
 <html>
@@ -148,41 +148,41 @@ async function sendLocawebEmail(lead) {
       <td align="center">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
           <tr>
-            <td style="background-color:#1F1F1F;padding:28px 32px;text-align:left;">
-              <img src="https://assets.zyrosite.com/cdn-cgi/image/format=auto,w=375,h=152,fit=crop/m6L4ppGnqncBWn2J/ativo-16-YZ9a5WVxR2fx79Vd.png" alt="Grupo DDM" height="40" style="display:block;">
+            <td style="background-color:#ffffff;padding:24px 32px;text-align:left;border-bottom:1px solid #FAF7F4;">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/0/0a/Logo-vero-internet-png.png" alt="Vero Internet" height="42" style="display:block;">
             </td>
           </tr>
           <tr>
             <td style="padding:32px;font-size:15px;line-height:1.7;color:#1F1F1F;">
-              <h2 style="color:#1F1F1F;font-family:'Poppins',Arial,sans-serif;margin:0 0 12px 0;font-size:22px;">Aviso de Fatura em Aberto — Vero Internet</h2>
+              <h2 style="color:#5b1f8f;font-family:'Poppins',Arial,sans-serif;margin:0 0 12px 0;font-size:22px;">Aviso de Fatura em Aberto</h2>
               <p style="margin:0 0 16px 0;">Prezado(a) <strong>${lead.name}</strong>,</p>
               <p style="margin:0 0 20px 0;">
-                Confirmamos o seu contato com a nossa assessoria de cobrança referente à pendência com a <strong>Vero Internet</strong>. Conforme solicitado, segue o código de barras para pagamento:
+                Confirmamos o seu contato com a nossa agente virtual referente à pendência com a <strong>Vero Internet</strong>. Conforme solicitado, segue o código de barras para pagamento da sua fatura:
               </p>
               <table width="100%" cellpadding="0" cellspacing="0" style="background:#FAF7F4;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
                 <tr><td style="padding:6px 0;word-break:break-all;"><strong>Linha Digitável:</strong> ${lead.barcode}</td></tr>
-                <tr><td style="padding:6px 0;"><strong>Valor da Fatura:</strong> <span style="color:#FF5706;font-size:16px;font-weight:bold;">${valorFormatado}</span></td></tr>
+                <tr><td style="padding:6px 0;"><strong>Valor da Fatura:</strong> <span style="color:#5b1f8f;font-size:16px;font-weight:bold;">${valorFormatado}</span></td></tr>
                 <tr><td style="padding:6px 0;"><strong>Vencimento Original:</strong> ${lead.due_date || ''}</td></tr>
                 <tr><td style="padding:6px 0;"><strong>Dias em Atraso:</strong> ${lead.dias_atraso || 0} dias</td></tr>
               </table>
-              <div style="background:#FAF7F4;border-left:4px solid #FF5706;padding:20px;margin:24px 0;border-radius:6px;text-align:center;">
+              <div style="background:#FAF7F4;border-left:4px solid #5b1f8f;padding:20px;margin:24px 0;border-radius:6px;text-align:center;">
                 <h3 style="margin:0 0 12px 0;font-family:'Poppins',Arial,sans-serif;color:#1F1F1F;font-size:15px;">Copie a Linha Digitável acima e utilize o aplicativo do seu banco para efetuar o pagamento.</h3>
               </div>
               <p style="margin:20px 0 0 0;font-size:14px;color:#475467;">
                 Qualquer dúvida, nossa equipe está à disposição.<br>
-                <strong>Equipe de Atendimento — Grupo DDM</strong>
+                <strong>Equipe de Atendimento — Vero Internet</strong>
               </p>
             </td>
           </tr>
           <tr>
-            <td style="background-color:#FF5706;padding:24px 32px;color:#ffffff;font-size:14px;line-height:1.6;">
+            <td style="background-color:#5b1f8f;padding:24px 32px;color:#ffffff;font-size:14px;line-height:1.6;">
               <p style="margin:0 0 12px 0;font-family:'Poppins',Arial,sans-serif;font-weight:700;font-size:15px;">Fale Conosco</p>
               <p style="margin:0 0 12px 0;">
-                <strong>Telefones:</strong> Rio de Janeiro (21) 3030-9193 &nbsp;|&nbsp; Demais localidades 4020-7740<br>
-                Atendimento de segunda a sexta, das 8h às 20h.
+                <strong>Central de Atendimento Vero:</strong> 4000-1020<br>
+                Você também pode emitir segundas vias e gerenciar sua conta pelo aplicativo <strong>Minha Vero</strong>.
               </p>
-              <a href="https://bit.ly/ddm-educacional" target="_blank" style="display:inline-block;background-color:#ffffff;color:#FF5706;text-decoration:none;font-family:'Poppins',Arial,sans-serif;font-weight:600;font-size:14px;padding:10px 20px;border-radius:6px;margin-top:4px;">
-                Falar no WhatsApp
+              <a href="https://www.verointernet.com.br" target="_blank" style="display:inline-block;background-color:#ffffff;color:#5b1f8f;text-decoration:none;font-family:'Poppins',Arial,sans-serif;font-weight:600;font-size:14px;padding:10px 20px;border-radius:6px;margin-top:4px;">
+                Acessar Site da Vero
               </a>
             </td>
           </tr>
