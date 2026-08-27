@@ -242,7 +242,7 @@ app.post('/api/campaigns/:id/start', (req, res) => {
     }
 
     if (campaign.status === 'pending' || campaign.status === 'failed') {
-      run('UPDATE campaigns SET status = "processing" WHERE id = ?', [id]);
+      run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
       // Executa a função assíncrona de processamento em background
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
       triggerCampaignProcessor();
