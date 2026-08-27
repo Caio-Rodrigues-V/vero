@@ -185,7 +185,17 @@ function parseRow(row) {
     status_internet = String(row[statusKey]).trim();
   }
 
-  return { name, phone, debt_value, due_date, barcode, dias_atraso, status_internet };
+  // 8. Encontrar e-mail do cliente
+  let email = '';
+  const emailKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'email' || hk === 'e-mail' || hk.includes('email') || hk.includes('e-mail');
+  });
+  if (emailKey && row[emailKey]) {
+    email = String(row[emailKey]).trim();
+  }
+
+  return { name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, email };
 }
 
 /**

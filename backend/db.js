@@ -40,11 +40,14 @@ function initDb() {
       dias_atraso INTEGER, -- Dias em atraso
       status_internet TEXT, -- Status da internet / contrato
       occurrence TEXT, -- Tabulação / Ocorrência final
+      email TEXT, -- E-mail do cliente
       call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'completed', 'failed'
       call_attempts INTEGER DEFAULT 0,
       call_log TEXT,
       sms_status TEXT DEFAULT 'pending', -- 'pending', 'sending', 'completed', 'failed'
       sms_log TEXT,
+      email_status TEXT DEFAULT 'pending', -- 'pending', 'sending', 'completed', 'failed'
+      email_log TEXT,
       FOREIGN KEY(campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     );
   `);
@@ -61,6 +64,15 @@ function initDb() {
   } catch (err) {}
   try {
     db.exec("ALTER TABLE leads ADD COLUMN occurrence TEXT;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN email TEXT;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN email_status TEXT DEFAULT 'pending';");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN email_log TEXT;");
   } catch (err) {}
 }
 

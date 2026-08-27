@@ -55,7 +55,7 @@ async function processCampaign(campaignId) {
         // 1. Atualizar para status temporário de envio
         run(
           `UPDATE leads 
-           SET call_status = 'calling', sms_status = 'pending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Aguardando resultado da ligação...'
+           SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Aguardando resultado da ligação...', email_log = 'Aguardando resultado da ligação...'
            WHERE id = ?`,
           [lead.id]
         );
@@ -64,20 +64,24 @@ async function processCampaign(campaignId) {
         const callResult = await makeVapiCall(lead);
 
         // 3. Atualizar com os status e logs de disparo iniciais
-        // O SMS permanece como 'pending' aguardando o fim da ligação para decidir se envia ou não.
+        // O SMS e Email permanecem como 'pending' aguardando o fim da ligação para decidir se envia ou não.
         const finalCallStatus = callResult.success ? 'calling' : 'failed';
         const finalSmsStatus = callResult.success ? 'pending' : 'failed';
         const finalSmsLog = callResult.success ? 'Aguardando resultado da ligação...' : 'Cancelado: Falha ao iniciar chamada.';
+        const finalEmailStatus = callResult.success ? 'pending' : 'failed';
+        const finalEmailLog = callResult.success ? 'Aguardando resultado da ligação...' : 'Cancelado: Falha ao iniciar chamada.';
 
         run(
           `UPDATE leads 
-           SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, call_attempts = call_attempts + 1 
+           SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, email_status = ?, email_log = ?, call_attempts = call_attempts + 1 
            WHERE id = ?`,
           [
             finalCallStatus,
             callResult.log,
             finalSmsStatus,
             finalSmsLog,
+            finalEmailStatus,
+            finalEmailLog,
             lead.id
           ]
         );

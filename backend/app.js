@@ -171,7 +171,7 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    let query = 'SELECT name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?';
+    let query = 'SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log, email_status, email_log FROM leads WHERE campaign_id = ?';
     const params = [id];
     if (occurrence && occurrence !== 'all') {
       query += ' AND occurrence = ?';
@@ -179,12 +179,13 @@ app.get('/api/campaigns/:id/export', (req, res) => {
     }
     const leads = all(query, params);
 
-    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
+    let csvContent = 'Nome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS,Status Email,Log Email\r\n';
     
     for (const lead of leads) {
       const row = [
         `"${lead.name.replace(/"/g, '""')}"`,
         `"${lead.phone}"`,
+        `"${lead.email || ''}"`,
         lead.debt_value,
         `"${lead.due_date || ''}"`,
         `"${lead.barcode || ''}"`,
@@ -194,7 +195,9 @@ app.get('/api/campaigns/:id/export', (req, res) => {
         `"${lead.call_status}"`,
         `"${(lead.call_log || '').replace(/"/g, '""')}"`,
         `"${lead.sms_status}"`,
-        `"${(lead.sms_log || '').replace(/"/g, '""')}"`
+        `"${(lead.sms_log || '').replace(/"/g, '""')}"`,
+        `"${lead.email_status}"`,
+        `"${(lead.email_log || '').replace(/"/g, '""')}"`
       ];
       csvContent += row.join(',') + '\r\n';
     }
@@ -352,8 +355,8 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
 
     // 3. Inserir os leads em lote usando transação nativa para alta performance (suporta 20k+ facilmente)
     const insertLeadStmt = db.prepare(`
-      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date, barcode, dias_atraso, status_internet) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, email) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     console.log(`[SERVER] Inserindo ${leads.length} leads no banco de dados para a campanha #${campaignId}...`);
@@ -370,7 +373,8 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
           lead.due_date, 
           lead.barcode || null,
           lead.dias_atraso || 0,
-          lead.status_internet || null
+          lead.status_internet || null,
+          lead.email || null
         );
       }
       run('COMMIT');
@@ -437,7 +441,7 @@ function updateCampaignStats(campaignId) {
         SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
         SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms,
         SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
-        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
+        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') AND email_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
       FROM leads
       WHERE campaign_id = ?
     `, [campaignId]);
@@ -465,7 +469,8 @@ function updateCampaignStats(campaignId) {
       FROM leads 
       WHERE campaign_id = ? 
         AND (call_status IN ('pending', 'processing', 'calling') 
-             OR sms_status IN ('pending', 'processing', 'sending'))
+             OR sms_status IN ('pending', 'processing', 'sending')
+             OR email_status IN ('pending', 'processing', 'sending'))
     `, [campaignId]);
 
     if (pendingLeads && pendingLeads.count === 0) {
@@ -636,33 +641,45 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [callStatus, logText, occurrence, leadId]
     );
 
-    // Decidir se envia a mensagem de acordo/boleto via Smart RCS
+    // Decidir se envia a mensagem de acordo/boleto via Smart RCS e E-mail
     const isPromise = occurrence === 'PROMESSA BOLETO' || occurrence === 'PROMESSA PIX';
     if (isPromise) {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
       if (lead) {
-        // Disparar Smart RCS de forma síncrona
-        const { triggerN8NSmsWebhook } = require('./services/communication.js');
+        const { triggerN8NSmsWebhook, sendLocawebEmail } = require('./services/communication.js');
+        
+        // 1. Disparar Smart RCS de forma síncrona
         const smsResult = await triggerN8NSmsWebhook(lead);
         const smsStatus = smsResult.success ? 'completed' : 'failed';
         
+        // 2. Disparar E-mail se houver e-mail cadastrado
+        let emailStatus = 'completed';
+        let emailLog = 'Não enviado: Lead sem e-mail cadastrado.';
+        if (lead.email && lead.email.includes('@')) {
+          const emailResult = await sendLocawebEmail(lead);
+          emailStatus = emailResult.success ? 'completed' : 'failed';
+          emailLog = emailResult.log;
+        }
+        
         run(
           `UPDATE leads 
-           SET sms_status = ?, sms_log = ? 
+           SET sms_status = ?, sms_log = ?, email_status = ?, email_log = ? 
            WHERE id = ?`,
-          [smsStatus, smsResult.log, leadId]
+          [smsStatus, smsResult.log, emailStatus, emailLog, leadId]
         );
       }
     } else {
-      // Se não houver formalização, não dispara SMS e atualiza status para concluir o fluxo
-      const smsStatus = callStatus === 'failed' ? 'failed' : 'completed';
-      const smsLog = callStatus === 'failed' ? 'Cancelado: Ligação de voz falhou.' : 'Não enviado: Ocorrência não gerou formalização.';
+      // Se não houver formalização, não dispara SMS/E-mail e atualiza status para concluir o fluxo
+      const finalSmsStatus = callStatus === 'failed' ? 'failed' : 'completed';
+      const finalSmsLog = callStatus === 'failed' ? 'Cancelado: Ligação de voz falhou.' : 'Não enviado: Ocorrência não gerou formalização.';
+      const finalEmailStatus = callStatus === 'failed' ? 'failed' : 'completed';
+      const finalEmailLog = callStatus === 'failed' ? 'Cancelado: Ligação de voz falhou.' : 'Não enviado: Ocorrência não gerou formalização.';
       
       run(
         `UPDATE leads 
-         SET sms_status = ?, sms_log = ? 
+         SET sms_status = ?, sms_log = ?, email_status = ?, email_log = ? 
          WHERE id = ?`,
-        [smsStatus, smsLog, leadId]
+        [finalSmsStatus, finalSmsLog, finalEmailStatus, finalEmailLog, leadId]
       );
     }
 

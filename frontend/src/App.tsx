@@ -36,6 +36,7 @@ interface Lead {
   campaign_id: number;
   name: string;
   phone: string;
+  email?: string;
   debt_value: number;
   due_date: string;
   occurrence?: string;
@@ -44,6 +45,8 @@ interface Lead {
   call_log: string;
   sms_status: 'pending' | 'processing' | 'sending' | 'completed' | 'failed';
   sms_log: string;
+  email_status?: 'pending' | 'processing' | 'sending' | 'completed' | 'failed';
+  email_log?: string;
 }
 
 interface DashboardStats {
@@ -987,6 +990,7 @@ export default function App() {
                     <tr className="border-b border-slate-100 text-slate-400 font-semibold">
                       <th className="py-3 px-4">Nome do Cliente</th>
                       <th className="py-3 px-4">Telefone</th>
+                      <th className="py-3 px-4">E-mail</th>
                       <th className="py-3 px-4">Valor</th>
                       <th className="py-3 px-4">Vencimento</th>
                       <th className="py-3 px-4">Ocorrência (Tabulação)</th>
@@ -994,6 +998,8 @@ export default function App() {
                       <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status RCS</th>
                       <th className="py-3 px-4">Log do RCS</th>
+                      <th className="py-3 px-4">Status E-mail</th>
+                      <th className="py-3 px-4">Log de E-mail</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
@@ -1002,6 +1008,7 @@ export default function App() {
                         <tr key={l.id} className="hover:bg-slate-50 transition-colors">
                           <td className="py-3 px-4 font-semibold text-slate-700">{l.name}</td>
                           <td className="py-3 px-4">{l.phone}</td>
+                          <td className="py-3 px-4 truncate max-w-[150px] text-slate-400" title={l.email}>{l.email || 'Nenhum'}</td>
                           <td className="py-3 px-4 font-bold text-slate-700">{formatBRL(l.debt_value)}</td>
                           <td className="py-3 px-4">{l.due_date}</td>
                           <td className="py-3 px-4">
@@ -1056,6 +1063,30 @@ export default function App() {
                           </td>
                           <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.sms_log}>
                             {l.sms_log || 'Nenhum registro'}
+                          </td>
+
+                          {/* Status E-mail */}
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded font-bold ${
+                              l.email_status === 'completed' && 'bg-green-50 text-green-700'
+                            } ${
+                              l.email_status === 'processing' && 'bg-amber-50 text-amber-700'
+                            } ${
+                              l.email_status === 'sending' && 'bg-sky-50 text-sky-700 animate-pulse'
+                            } ${
+                              l.email_status === 'failed' && 'bg-red-50 text-red-700'
+                            } ${
+                              l.email_status === 'pending' && 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {l.email_status === 'completed' && 'Enviado'}
+                              {l.email_status === 'processing' && 'Fila n8n'}
+                              {l.email_status === 'sending' && 'Enviando...'}
+                              {l.email_status === 'failed' && 'Falhou'}
+                              {l.email_status === 'pending' && 'Aguardando'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.email_log}>
+                            {l.email_log || 'Nenhum registro'}
                           </td>
                         </tr>
                       ))
