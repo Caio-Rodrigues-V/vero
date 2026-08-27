@@ -1,6 +1,6 @@
-import { run, get, all } from '../db.js';
-import { triggerN8NSmsWebhook } from './communication.js';
-import { makeVapiCall } from './vapi.js';
+const { run, get, all } = require('../db.js');
+const { triggerN8NSmsWebhook } = require('./communication.js');
+const { makeVapiCall } = require('./vapi.js');
 
 const activeJobs = new Set();
 
@@ -102,7 +102,7 @@ async function processCampaign(campaignId) {
 /**
  * Aciona o processador para verificar se há campanhas com leads pendentes
  */
-export function triggerCampaignProcessor() {
+function triggerCampaignProcessor() {
   const processingCampaigns = all("SELECT id FROM campaigns WHERE status = 'processing'");
   for (const row of processingCampaigns) {
     const pendingCount = get("SELECT COUNT(id) as count FROM leads WHERE campaign_id = ? AND call_status = 'pending'", [row.id]);
@@ -115,8 +115,10 @@ export function triggerCampaignProcessor() {
 /**
  * Inicia o loop de monitoramento
  */
-export function startMonitorLoop() {
+function startMonitorLoop() {
   setInterval(() => {
     triggerCampaignProcessor();
   }, 5000);
 }
+
+module.exports = { triggerCampaignProcessor, startMonitorLoop };

@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+const dotenv = require('dotenv');
 dotenv.config();
 
 /**
@@ -7,7 +7,7 @@ dotenv.config();
  * @param {object} lead - O objeto do lead
  * @returns {Promise<{success: boolean, log: string}>}
  */
-export async function triggerN8NSmsWebhook(lead) {
+async function triggerN8NSmsWebhook(lead) {
   const n8nUrl = process.env.N8N_WEBHOOK_URL;
   
   if (!n8nUrl) {
@@ -52,3 +52,5 @@ export async function triggerN8NSmsWebhook(lead) {
     };
   }
 }
+
+module.exports = { triggerN8NSmsWebhook };

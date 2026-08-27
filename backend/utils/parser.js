@@ -1,6 +1,6 @@
-import xlsx from 'xlsx';
-import fs from 'fs';
-import csvParser from 'csv-parser';
+const xlsx = require('xlsx');
+const fs = require('fs');
+const csvParser = require('csv-parser');
 
 /**
  * Normaliza os cabeçalhos das planilhas para mapear aos campos do banco
@@ -146,7 +146,7 @@ function parseCSV(filePath) {
 /**
  * Função principal para analisar a planilha baseada na extensão
  */
-export async function parseSpreadsheet(filePath, originalFilename) {
+async function parseSpreadsheet(filePath, originalFilename) {
   const ext = originalFilename.toLowerCase().split('.').pop();
   
   if (ext === 'csv') {
@@ -157,3 +157,5 @@ export async function parseSpreadsheet(filePath, originalFilename) {
     throw new Error('Formato de arquivo não suportado. Envie CSV ou Excel (.xlsx, .xls)');
   }
 }
+
+module.exports = { parseSpreadsheet };

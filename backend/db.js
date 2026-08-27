@@ -1,15 +1,11 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const Database = require('better-sqlite3');
+const path = require('path');
 
 const dbPath = path.join(__dirname, 'vero_recovery.db');
 const db = new Database(dbPath);
 
 // Inicializar as tabelas do banco de dados
-export function initDb() {
+function initDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,22 +47,28 @@ export function initDb() {
 }
 
 // Helper para executar queries que não retornam dados
-export function run(sql, params = []) {
+function run(sql, params = []) {
   const stmt = db.prepare(sql);
   return stmt.run(...params);
 }
 
 // Helper para obter um único registro
-export function get(sql, params = []) {
+function get(sql, params = []) {
   const stmt = db.prepare(sql);
   const results = stmt.all(...params);
   return results.length > 0 ? results[0] : null;
 }
 
 // Helper para obter múltiplos registros
-export function all(sql, params = []) {
+function all(sql, params = []) {
   const stmt = db.prepare(sql);
   return stmt.all(...params);
 }
 
-export default db;
+module.exports = {
+  initDb,
+  run,
+  get,
+  all,
+  db
+};

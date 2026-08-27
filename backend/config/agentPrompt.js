@@ -2,7 +2,7 @@
  * Configuração dos Prompts do Agente de Voz (Helena da Vero Internet)
  */
 
-export const SYSTEM_PROMPT_TEMPLATE = `
+const SYSTEM_PROMPT_TEMPLATE = `
 Você é a Helena, uma assistente virtual de inteligência artificial amigável da Vero Internet.
 Seu objetivo é ligar para o cliente para lembrá-lo de forma educada e prestativa sobre uma fatura em aberto.
 
@@ -24,4 +24,9 @@ REGRAS RÍGIDAS:
 - Fale no idioma Português do Brasil (pt-BR).
 `.trim();
 
-export const FIRST_MESSAGE_TEMPLATE = `Olá, {{name}}! Tudo bem? Aqui é a Helena, da Vero Internet. Estou te ligando rapidinho para bater um papo sobre a sua fatura vencida no valor de {{debt_value}}. Fica tranquilo, estou aqui para te ajudar a resolver isso de forma super rápida. Você me ouve bem?`;
+const FIRST_MESSAGE_TEMPLATE = `Olá, {{name}}! Tudo bem? Aqui é a Helena, da Vero Internet. Estou te ligando rapidinho para bater um papo sobre a sua fatura vencida no valor de {{debt_value}}. Fica tranquilo, estou aqui para te ajudar a resolver isso de forma super rápida. Você me ouve bem?`;
+
+module.exports = {
+  SYSTEM_PROMPT_TEMPLATE,
+  FIRST_MESSAGE_TEMPLATE
+};

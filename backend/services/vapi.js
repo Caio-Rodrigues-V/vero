@@ -1,6 +1,6 @@
-import dotenv from 'dotenv';
-import { SYSTEM_PROMPT_TEMPLATE, FIRST_MESSAGE_TEMPLATE } from '../config/agentPrompt.js';
-import { get } from '../db.js';
+const dotenv = require('dotenv');
+const { SYSTEM_PROMPT_TEMPLATE, FIRST_MESSAGE_TEMPLATE } = require('../config/agentPrompt.js');
+const { get } = require('../db.js');
 
 dotenv.config();
 
@@ -28,7 +28,7 @@ function formatE164(phone) {
  * @param {object} lead - O lead contendo telefone, nome, valor e vencimento
  * @returns {Promise<{success: boolean, log: string, callId?: string}>}
  */
-export async function makeVapiCall(lead) {
+async function makeVapiCall(lead) {
   const apiKey = process.env.VAPI_API_KEY;
   const assistantId = process.env.VAPI_ASSISTANT_ID;
   const phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID;
@@ -159,3 +159,5 @@ export async function makeVapiCall(lead) {
     };
   }
 }
+
+module.exports = { makeVapiCall };
