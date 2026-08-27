@@ -22,12 +22,22 @@ function detectSeparator(filePath) {
  */
 function cleanPhone(phone) {
   if (!phone) return '';
+  let str = String(phone).trim();
+
+  // Tratar notação científica (ex: 6,79E+10 ou 1,29e10)
+  if (/e/i.test(str)) {
+    const normalized = str.replace(',', '.');
+    const num = Number(normalized);
+    if (!isNaN(num)) {
+      str = num.toFixed(0);
+    }
+  }
+
   // Remover tudo que não for dígito
-  let cleaned = String(phone).replace(/\D/g, '');
+  let cleaned = str.replace(/\D/g, '');
   
-  // Tratar formato brasileiro
+  // Tratar formato brasileiro (se tiver 10 ou 11 dígitos, adiciona o DDI 55)
   if (cleaned.length === 10 || cleaned.length === 11) {
-    // Adiciona código do país 55 se faltar
     cleaned = '55' + cleaned;
   }
   
@@ -142,7 +152,40 @@ function parseRow(row) {
     }
   }
 
-  return { name, phone, debt_value, due_date };
+  // 5. Encontrar linha digitável (barcode)
+  let barcode = '';
+  const barcodeKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'linha_digitavel' || hk === 'barcode' || hk === 'codigo_barras' || hk === 'linha' || hk === 'digitavel';
+  }) || Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk.includes('digitavel') || hk.includes('barras') || hk.includes('barcode');
+  });
+  if (barcodeKey && row[barcodeKey]) {
+    barcode = String(row[barcodeKey]).trim();
+  }
+
+  // 6. Encontrar dias de atraso
+  let dias_atraso = 0;
+  const atrasoKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'dias_em_atraso' || hk === 'dias_atraso' || hk.includes('atraso');
+  });
+  if (atrasoKey && row[atrasoKey]) {
+    dias_atraso = parseInt(row[atrasoKey]) || 0;
+  }
+
+  // 7. Encontrar status da internet
+  let status_internet = '';
+  const statusKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'status_contrato' || hk === 'status_internet' || hk === 'status' || hk.includes('status');
+  });
+  if (statusKey && row[statusKey]) {
+    status_internet = String(row[statusKey]).trim();
+  }
+
+  return { name, phone, debt_value, due_date, barcode, dias_atraso, status_internet };
 }
 
 /**
