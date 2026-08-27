@@ -37,6 +37,8 @@ function initDb() {
       debt_value REAL NOT NULL,
       due_date TEXT,
       barcode TEXT, -- Linha Digitável / Código de barras / PIX
+      dias_atraso INTEGER, -- Dias em atraso
+      status_internet TEXT, -- Status da internet / contrato
       call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'completed', 'failed'
       call_attempts INTEGER DEFAULT 0,
       call_log TEXT,
@@ -49,9 +51,13 @@ function initDb() {
   // Executar migração para bancos de dados existentes
   try {
     db.exec("ALTER TABLE leads ADD COLUMN barcode TEXT;");
-  } catch (err) {
-    // Ignorar erro se a coluna já existir no banco do cPanel
-  }
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN dias_atraso INTEGER;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN status_internet TEXT;");
+  } catch (err) {}
 }
 
 // Helper para executar queries que não retornam dados

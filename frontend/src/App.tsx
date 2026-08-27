@@ -8,7 +8,6 @@ import {
   Play, 
   CheckCircle2, 
   AlertTriangle, 
-  XCircle, 
   Download, 
   RefreshCw, 
   Trash2, 
@@ -17,24 +16,12 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  LineChart, 
-  Line, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend 
-} from 'recharts';
 
 // Interfaces para os tipos de dados
 interface Campaign {
   id: number;
   name: string;
-  status: 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'failed';
   total_leads: number;
   processed_leads: number;
   successful_calls: number;
@@ -129,7 +116,7 @@ export default function App() {
   // Poll for campaign updates if there is a processing campaign
   useEffect(() => {
     const hasActiveCampaign = campaigns.some(c => c.status === 'processing');
-    let interval: NodeJS.Timeout;
+    let interval: any;
 
     if (hasActiveCampaign) {
       interval = setInterval(() => {
@@ -243,6 +230,23 @@ export default function App() {
     }
   };
 
+  const handleStartCampaign = async (id: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/start`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        fetchCampaigns();
+        fetchStats();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Erro ao iniciar campanha');
+      }
+    } catch (err) {
+      console.error('Error starting campaign:', err);
+    }
+  };
+
   const handleCancelCampaign = async (id: number) => {
     if (!confirm('Deseja realmente cancelar/pausar esta campanha?')) return;
     try {
@@ -340,16 +344,7 @@ export default function App() {
     l.phone.includes(searchTerm)
   );
 
-  // Dados para gráficos de exemplo
-  const mockWeeklyStats = [
-    { name: 'Seg', Valor: 12000, Contatos: 56 },
-    { name: 'Ter', Valor: 15400, Contatos: 72 },
-    { name: 'Qua', Valor: 24500, Contatos: 112 },
-    { name: 'Qui', Valor: 14000, Contatos: 68 },
-    { name: 'Sex', Valor: 19800, Contatos: 80 },
-    { name: 'Sáb', Valor: 18200, Contatos: 76 },
-    { name: 'Dom', Valor: 4000, Contatos: 23 },
-  ];
+
 
   return (
     <div className="flex min-h-screen bg-vero-bg">
@@ -537,10 +532,13 @@ export default function App() {
                                     c.status === 'processing' && 'bg-amber-50 text-amber-700 animate-pulse'
                                   } ${
                                     c.status === 'failed' && 'bg-red-50 text-red-700'
+                                  } ${
+                                    c.status === 'pending' && 'bg-slate-100 text-slate-700 border border-slate-300'
                                   }`}>
                                     {c.status === 'completed' && 'Concluído'}
                                     {c.status === 'processing' && 'Processando'}
-                                    {c.status === 'failed' && 'Interrompido'}
+                                    {c.status === 'failed' && 'Pausada'}
+                                    {c.status === 'pending' && 'Pendente'}
                                   </span>
                                 </td>
                               </tr>
@@ -737,8 +735,8 @@ export default function App() {
                     disabled={uploading}
                     className="w-full bg-vero-magenta text-white py-3 rounded-lg text-sm font-semibold hover:bg-rose-700 disabled:bg-rose-400 transition flex items-center justify-center gap-2"
                   >
-                    <Play size={16} />
-                    {uploading ? 'Importando e Enviando...' : 'Criar e Disparar Campanha'}
+                    <UploadCloud size={16} />
+                    {uploading ? 'Importando Leads...' : 'Criar Campanha e Importar'}
                   </button>
                 </form>
 
@@ -779,10 +777,13 @@ export default function App() {
                                 c.status === 'processing' && 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
                               } ${
                                 c.status === 'failed' && 'bg-red-50 text-red-700 border border-red-200'
+                              } ${
+                                c.status === 'pending' && 'bg-slate-50 text-slate-600 border border-slate-200'
                               }`}>
                                 {c.status === 'completed' && 'Concluído'}
-                                {c.status === 'processing' && 'Enviando p/ n8n'}
-                                {c.status === 'failed' && 'Cancelada'}
+                                {c.status === 'processing' && 'Disparando'}
+                                {c.status === 'failed' && 'Pausada'}
+                                {c.status === 'pending' && 'Pendente'}
                               </span>
                             </div>
                             <div className="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
@@ -802,6 +803,15 @@ export default function App() {
 
                           {/* Ações */}
                           <div className="flex items-center gap-2">
+                            {(c.status === 'pending' || c.status === 'failed') && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleStartCampaign(c.id); }}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700 transition flex items-center gap-1"
+                              >
+                                <Play size={12} />
+                                Disparar
+                              </button>
+                            )}
                             {c.status === 'processing' && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleCancelCampaign(c.id); }}

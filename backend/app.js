@@ -145,9 +145,9 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    const leads = all('SELECT name, phone, debt_value, due_date, barcode, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
+    const leads = all('SELECT name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
 
-    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
+    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
     
     for (const lead of leads) {
       const row = [
@@ -156,6 +156,8 @@ app.get('/api/campaigns/:id/export', (req, res) => {
         lead.debt_value,
         `"${lead.due_date || ''}"`,
         `"${lead.barcode || ''}"`,
+        lead.dias_atraso || 0,
+        `"${lead.status_internet || ''}"`,
         `"${lead.call_status}"`,
         `"${(lead.call_log || '').replace(/"/g, '""')}"`,
         `"${lead.sms_status}"`,
@@ -189,6 +191,31 @@ app.post('/api/campaigns/:id/cancel', (req, res) => {
       res.json({ success: true, message: 'Campanha cancelada/interrompida com sucesso.' });
     } else {
       res.status(400).json({ error: 'Apenas campanhas em processamento podem ser canceladas.' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Iniciar ou Retomar disparos de uma campanha
+ */
+app.post('/api/campaigns/:id/start', (req, res) => {
+  const { id } = req.params;
+  try {
+    const campaign = get('SELECT status FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    if (campaign.status === 'pending' || campaign.status === 'failed') {
+      run('UPDATE campaigns SET status = "processing" WHERE id = ?', [id]);
+      // Executa a função assíncrona de processamento em background
+      const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
+      triggerCampaignProcessor();
+      res.json({ success: true, message: 'Disparos da campanha iniciados com sucesso.' });
+    } else {
+      res.status(400).json({ error: 'Apenas campanhas pendentes ou pausadas podem ser iniciadas.' });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -272,22 +299,31 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
 
     const { vapiAssistantId } = req.body;
 
-    // 2. Inserir campanha no banco
+    // 2. Inserir campanha no banco (status inicial como 'pending')
     const campaignResult = run(
       'INSERT INTO campaigns (name, status, vapi_assistant_id, total_leads) VALUES (?, ?, ?, ?)',
-      [campaignName.trim(), 'processing', vapiAssistantId || null, leads.length]
+      [campaignName.trim(), 'pending', vapiAssistantId || null, leads.length]
     );
     const campaignId = campaignResult.lastInsertRowid;
 
     // 3. Inserir os leads em lote usando transação nativa para alta performance (suporta 20k+ facilmente)
     const insertLeadStmt = db.prepare(`
-      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date, barcode) 
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date, barcode, dias_atraso, status_internet) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertTransaction = db.transaction((cId, leadList) => {
       for (const lead of leadList) {
-        insertLeadStmt.run(cId, lead.name, lead.phone, lead.debt_value, lead.due_date, lead.barcode || null);
+        insertLeadStmt.run(
+          cId, 
+          lead.name, 
+          lead.phone, 
+          lead.debt_value, 
+          lead.due_date, 
+          lead.barcode || null,
+          lead.dias_atraso || 0,
+          lead.status_internet || null
+        );
       }
     });
 
@@ -296,14 +332,11 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     insertTransaction(campaignId, leads);
     console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms.`);
 
-    // 4. Iniciar processamento assíncrono em background
-    triggerCampaignProcessor();
-
     res.json({
       success: true,
       campaignId,
       totalLeads: leads.length,
-      message: `Campanha criada com ${leads.length} leads. Disparos iniciados.`
+      message: `Campanha criada com sucesso. Clique em "Disparar" para iniciar os envios.`
     });
 
   } catch (error) {
