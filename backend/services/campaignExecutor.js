@@ -55,7 +55,7 @@ async function processCampaign(campaignId) {
         // 1. Atualizar para status temporário de envio
         run(
           `UPDATE leads 
-           SET call_status = 'calling', sms_status = 'sending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Enviando via Smart RCS...'
+           SET call_status = 'calling', sms_status = 'pending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Aguardando resultado da ligação...'
            WHERE id = ?`,
           [lead.id]
         );
@@ -63,13 +63,11 @@ async function processCampaign(campaignId) {
         // 2. Disparar Chamada de voz via VAPI (direto pelo backend)
         const callResult = await makeVapiCall(lead);
 
-        // 3. Disparar SMS/RCS diretamente via API da Smart RCS
-        const smsResult = await triggerN8NSmsWebhook(lead);
-
-        // 4. Atualizar com os status e logs de disparo iniciais
-        // Como o Smart RCS é direto e síncrono, se tiver sucesso já marcamos como 'completed'.
+        // 3. Atualizar com os status e logs de disparo iniciais
+        // O SMS permanece como 'pending' aguardando o fim da ligação para decidir se envia ou não.
         const finalCallStatus = callResult.success ? 'calling' : 'failed';
-        const finalSmsStatus = smsResult.success ? 'completed' : 'failed';
+        const finalSmsStatus = callResult.success ? 'pending' : 'failed';
+        const finalSmsLog = callResult.success ? 'Aguardando resultado da ligação...' : 'Cancelado: Falha ao iniciar chamada.';
 
         run(
           `UPDATE leads 
@@ -79,24 +77,20 @@ async function processCampaign(campaignId) {
             finalCallStatus,
             callResult.log,
             finalSmsStatus,
-            smsResult.log,
+            finalSmsLog,
             lead.id
           ]
         );
 
-        // Se houver falha imediata em algum dos canais, atualiza o processed da campanha
-        if (!callResult.success || !smsResult.success) {
+        // Se houver falha imediata no disparo da chamada, já atualiza as falhas da campanha
+        if (!callResult.success) {
           run(
             `UPDATE campaigns 
              SET processed_leads = processed_leads + 1,
-                 failed_calls = failed_calls + ?,
-                 failed_sms = failed_sms + ?
+                 failed_calls = failed_calls + 1,
+                 failed_sms = failed_sms + 1
              WHERE id = ?`,
-            [
-              !callResult.success ? 1 : 0,
-              !smsResult.success ? 1 : 0,
-              campaignId
-            ]
+            [campaignId]
           );
         }
       });

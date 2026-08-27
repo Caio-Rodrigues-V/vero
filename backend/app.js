@@ -426,38 +426,10 @@ app.get('/api/sample-file', (req, res) => {
 });
 
 /**
- * Endpoint de callback para o n8n atualizar o status do lead
+ * Recalcula e atualiza as estatísticas acumuladas de uma campanha no banco de dados.
  */
-app.post('/api/leads/update', (req, res) => {
-  const { lead_id, call_status, call_log, sms_status, sms_log, occurrence } = req.body;
-
-  if (!lead_id) {
-    return res.status(400).json({ error: 'lead_id é obrigatório.' });
-  }
-
+function updateCampaignStats(campaignId) {
   try {
-    const lead = get('SELECT * FROM leads WHERE id = ?', [lead_id]);
-    if (!lead) {
-      return res.status(404).json({ error: 'Lead não encontrado.' });
-    }
-
-    const campaignId = lead.campaign_id;
-
-    // Valores novos ou mantidos
-    const newCallStatus = call_status || lead.call_status;
-    const newCallLog = call_log !== undefined ? call_log : lead.call_log;
-    const newSmsStatus = sms_status || lead.sms_status;
-    const newSmsLog = sms_log !== undefined ? sms_log : lead.sms_log;
-    const newOccurrence = occurrence !== undefined ? occurrence : lead.occurrence;
-
-    run(
-      `UPDATE leads 
-       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, occurrence = ? 
-       WHERE id = ?`,
-      [newCallStatus, newCallLog, newSmsStatus, newSmsLog, newOccurrence, lead_id]
-    );
-
-    // Recalcular as estatísticas totais da campanha no banco de forma agregada
     const stats = get(`
       SELECT 
         COUNT(id) as total,
@@ -496,10 +468,49 @@ app.post('/api/leads/update', (req, res) => {
              OR sms_status IN ('pending', 'processing', 'sending'))
     `, [campaignId]);
 
-    if (pendingLeads.count === 0) {
+    if (pendingLeads && pendingLeads.count === 0) {
       run("UPDATE campaigns SET status = 'completed' WHERE id = ?", [campaignId]);
-      console.log(`[SERVER] Campanha #${campaignId} marcada como CONCLUÍDA após retorno do n8n.`);
+      console.log(`[SERVER] Campanha #${campaignId} marcada como CONCLUÍDA.`);
     }
+  } catch (err) {
+    console.error('[STATS UPDATE ERROR]', err);
+  }
+}
+
+/**
+ * Endpoint de callback para o n8n atualizar o status do lead
+ */
+app.post('/api/leads/update', (req, res) => {
+  const { lead_id, call_status, call_log, sms_status, sms_log, occurrence } = req.body;
+
+  if (!lead_id) {
+    return res.status(400).json({ error: 'lead_id é obrigatório.' });
+  }
+
+  try {
+    const lead = get('SELECT * FROM leads WHERE id = ?', [lead_id]);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead não encontrado.' });
+    }
+
+    const campaignId = lead.campaign_id;
+
+    // Valores novos ou mantidos
+    const newCallStatus = call_status || lead.call_status;
+    const newCallLog = call_log !== undefined ? call_log : lead.call_log;
+    const newSmsStatus = sms_status || lead.sms_status;
+    const newSmsLog = sms_log !== undefined ? sms_log : lead.sms_log;
+    const newOccurrence = occurrence !== undefined ? occurrence : lead.occurrence;
+
+    run(
+      `UPDATE leads 
+       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, occurrence = ? 
+       WHERE id = ?`,
+      [newCallStatus, newCallLog, newSmsStatus, newSmsLog, newOccurrence, lead_id]
+    );
+
+    // Recalcular as estatísticas totais da campanha no banco usando a função centralizada
+    updateCampaignStats(campaignId);
 
     res.json({ success: true, message: 'Status do lead atualizado e métricas recalculadas.' });
   } catch (error) {
@@ -581,7 +592,7 @@ function classifyOccurrence(call) {
 /**
  * Endpoint de webhook para receber relatórios da VAPI.ai
  */
-app.post('/api/vapi-webhook', (req, res) => {
+app.post('/api/vapi-webhook', async (req, res) => {
   try {
     const { message } = req.body;
 
@@ -617,7 +628,7 @@ app.post('/api/vapi-webhook', (req, res) => {
     // Classificar ocorrência
     const occurrence = classifyOccurrence(call);
 
-    // Atualizar o lead com o status, log e ocorrência tabulada
+    // Atualizar o lead com o status, log e ocorrência da ligação
     run(
       `UPDATE leads 
        SET call_status = ?, call_log = ?, occurrence = ? 
@@ -625,49 +636,38 @@ app.post('/api/vapi-webhook', (req, res) => {
       [callStatus, logText, occurrence, leadId]
     );
 
-    // Recalcular as estatísticas totais da campanha no banco
-    const stats = get(`
-      SELECT 
-        COUNT(id) as total,
-        SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) as successful_calls,
-        SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
-        SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms,
-        SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
-        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
-      FROM leads
-      WHERE campaign_id = ?
-    `, [campaignId]);
-
-    run(`
-      UPDATE campaigns 
-      SET processed_leads = ?,
-          successful_calls = ?,
-          failed_calls = ?,
-          successful_sms = ?,
-          failed_sms = ?
-      WHERE id = ?
-    `, [
-      stats.processed || 0,
-      stats.successful_calls || 0,
-      stats.failed_calls || 0,
-      stats.successful_sms || 0,
-      stats.failed_sms || 0,
-      campaignId
-    ]);
-
-    // Verificar se todos os leads desta campanha foram finalizados
-    const pendingLeads = get(`
-      SELECT COUNT(id) as count 
-      FROM leads 
-      WHERE campaign_id = ? 
-        AND (call_status IN ('pending', 'processing', 'calling') 
-             OR sms_status IN ('pending', 'processing', 'sending'))
-    `, [campaignId]);
-
-    if (pendingLeads.count === 0) {
-      run("UPDATE campaigns SET status = 'completed' WHERE id = ?", [campaignId]);
-      console.log(`[SERVER] Campanha #${campaignId} marcada como CONCLUÍDA após retorno da VAPI.`);
+    // Decidir se envia a mensagem de acordo/boleto via Smart RCS
+    const isPromise = occurrence === 'PROMESSA BOLETO' || occurrence === 'PROMESSA PIX';
+    if (isPromise) {
+      const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
+      if (lead) {
+        // Disparar Smart RCS de forma síncrona
+        const { triggerN8NSmsWebhook } = require('./services/communication.js');
+        const smsResult = await triggerN8NSmsWebhook(lead);
+        const smsStatus = smsResult.success ? 'completed' : 'failed';
+        
+        run(
+          `UPDATE leads 
+           SET sms_status = ?, sms_log = ? 
+           WHERE id = ?`,
+          [smsStatus, smsResult.log, leadId]
+        );
+      }
+    } else {
+      // Se não houver formalização, não dispara SMS e atualiza status para concluir o fluxo
+      const smsStatus = callStatus === 'failed' ? 'failed' : 'completed';
+      const smsLog = callStatus === 'failed' ? 'Cancelado: Ligação de voz falhou.' : 'Não enviado: Ocorrência não gerou formalização.';
+      
+      run(
+        `UPDATE leads 
+         SET sms_status = ?, sms_log = ? 
+         WHERE id = ?`,
+        [smsStatus, smsLog, leadId]
+      );
     }
+
+    // Recalcular as estatísticas totais da campanha no banco usando a função centralizada
+    updateCampaignStats(campaignId);
 
     res.json({ success: true, message: 'Webhook VAPI processado com sucesso.' });
 
