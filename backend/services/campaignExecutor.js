@@ -16,6 +16,7 @@ async function processCampaign(campaignId) {
   try {
     const batchSize = process.env.BATCH_SIZE ? parseInt(process.env.BATCH_SIZE) : 100;
     const intervalMs = process.env.BATCH_INTERVAL_MS ? parseInt(process.env.BATCH_INTERVAL_MS) : 50;
+    const maxConcurrentCalls = process.env.MAX_CONCURRENT_CALLS ? parseInt(process.env.MAX_CONCURRENT_CALLS) : 50;
 
     while (true) {
       // Obter campanha
@@ -24,10 +25,24 @@ async function processCampaign(campaignId) {
         break;
       }
 
-      // Buscar leads pendentes de disparo inicial
+      // Limitar concorrência ativa baseada nas chamadas em andamento ('calling')
+      const activeCallsRow = get("SELECT COUNT(id) as count FROM leads WHERE call_status = 'calling'");
+      const activeCalls = activeCallsRow ? activeCallsRow.count : 0;
+      
+      const availableSlots = maxConcurrentCalls - activeCalls;
+      if (availableSlots <= 0) {
+        // Canais congestionados. Aguarda 1 segundo e tenta de novo
+        console.log(`[EXECUTOR] Limite de concorrência atingido (${activeCalls}/${maxConcurrentCalls} ativas). Aguardando canais livres...`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      const limit = Math.min(batchSize, availableSlots);
+
+      // Buscar leads pendentes de disparo inicial limitando pelos canais disponíveis
       const leads = all(
         "SELECT * FROM leads WHERE campaign_id = ? AND call_status = 'pending' AND sms_status = 'pending' LIMIT ?",
-        [campaignId, batchSize]
+        [campaignId, limit]
       );
 
       if (leads.length === 0) {
