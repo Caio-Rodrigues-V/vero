@@ -196,6 +196,9 @@ async function makeVapiCall(lead) {
     };
   }
 
+  const baseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
+  const webhookUrl = `${baseUrl}/api/vapi-webhook`;
+
   // Montar o corpo da requisição para a VAPI
   let body = {
     customer: {
@@ -205,7 +208,8 @@ async function makeVapiCall(lead) {
     metadata: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
-    }
+    },
+    serverUrl: webhookUrl
   };
 
   // Se o usuário especificou um ID de número da VAPI para fazer a chamada externa
@@ -219,6 +223,8 @@ async function makeVapiCall(lead) {
     body.assistantOverrides = {
       recordingEnabled: true,
       firstMessage: firstMessage,
+      serverUrl: webhookUrl,
+      server: { url: webhookUrl, timeoutSeconds: 20 },
       model: {
         provider: "openai",
         model: "gpt-4o-mini",
@@ -238,6 +244,8 @@ async function makeVapiCall(lead) {
     body.assistant = {
       name: "Verô - Vero Cobrança",
       firstMessage: firstMessage,
+      serverUrl: webhookUrl,
+      server: { url: webhookUrl, timeoutSeconds: 20 },
       model: {
         provider: "openai",
         model: "gpt-4o-mini",
