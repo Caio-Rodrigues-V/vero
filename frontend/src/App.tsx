@@ -89,6 +89,10 @@ export default function App() {
   const [leadsTotalCount, setLeadsTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Ocorrências / Tabulações DDM
+  const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
+  const [exportOccurrenceFilter, setExportOccurrenceFilter] = useState<string>('all');
+
   // Simulation state
   const [simulating, setSimulating] = useState(false);
 
@@ -97,7 +101,20 @@ export default function App() {
     fetchStats();
     fetchCampaigns();
     fetchVapiAssistants();
+    fetchOccurrences('all');
   }, []);
+
+  const fetchOccurrences = async (campaignId: number | 'all' = 'all') => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/occurrences?campaignId=${campaignId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOccurrences(data);
+      }
+    } catch (err) {
+      console.error('Error fetching occurrences:', err);
+    }
+  };
 
   const fetchVapiAssistants = async () => {
     try {
@@ -123,6 +140,7 @@ export default function App() {
       interval = setInterval(() => {
         fetchCampaigns();
         fetchStats();
+        fetchOccurrences(selectedCampaignId || 'all');
         if (selectedCampaignId) {
           fetchLeads(selectedCampaignId, leadsPage);
         }
@@ -180,6 +198,7 @@ export default function App() {
     setSelectedCampaignId(id);
     setLeadsPage(1);
     fetchLeads(id, 1);
+    fetchOccurrences(id);
   };
 
   const handleFileUpload = async (e: React.FormEvent) => {
@@ -663,6 +682,75 @@ export default function App() {
                   )}
                 </div>
               </div>
+
+              {/* Ocorrências e Tabulações da Operação */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mt-8 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Distribuição de Ocorrências (Tabulações DDM)</h3>
+                    <p className="text-xs text-slate-400">Classificação em tempo real com base nos retornos da VAPI e Smart RCS</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">Filtrar por Campanha:</span>
+                    <select
+                      value={selectedCampaignId || 'all'}
+                      onChange={(e) => {
+                        const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                        if (val === 'all') {
+                          setSelectedCampaignId(null);
+                          fetchOccurrences('all');
+                        } else {
+                          setSelectedCampaignId(val);
+                          fetchOccurrences(val);
+                        }
+                      }}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
+                    >
+                      <option value="all">Todas as Campanhas</option>
+                      {campaigns.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {occurrences.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                    {occurrences.map(o => {
+                      const totalCount = occurrences.reduce((acc, curr) => acc + curr.count, 0);
+                      const pct = totalCount > 0 ? Math.round((o.count / totalCount) * 100) : 0;
+                      return (
+                        <div key={o.occurrence} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex flex-col justify-between">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-bold text-vero-magenta leading-tight line-clamp-2" title={o.occurrence}>
+                              {o.occurrence}
+                            </span>
+                            <span className="bg-rose-50 text-vero-magenta border border-rose-100 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                              {o.count}
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                              <span>Proporção na Operação</span>
+                              <span className="font-semibold">{pct}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5">
+                              <div
+                                className="bg-vero-magenta h-1.5 rounded-full"
+                                style={{ width: `${pct}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-slate-400 text-sm">
+                    Nenhuma ocorrência tabulada nas campanhas até o momento.
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -1012,10 +1100,33 @@ export default function App() {
           {/* TAB 4: RELATÓRIOS */}
           {activeTab === 'reports' && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-              <h3 className="text-base font-bold text-slate-800">Exportar Campanhas de Recuperação</h3>
-              <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
-                Baixe o resultado completo das ligações VAPI e envios de RCS das campanhas finalizadas. O relatório contém as transcrições das chamadas e comprovantes de recebimento de SMS para conciliação em formato CSV adequado para o Excel.
-              </p>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Exportar Campanhas de Recuperação</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
+                    Baixe o resultado completo das ligações VAPI e envios de RCS. O relatório contém as transcrições das chamadas e logs do Smart RCS.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500">Filtrar Exportação:</span>
+                  <select
+                    value={exportOccurrenceFilter}
+                    onChange={(e) => setExportOccurrenceFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
+                  >
+                    <option value="all">Todas as Ocorrências</option>
+                    <option value="PROMESSA BOLETO">PROMESSA BOLETO</option>
+                    <option value="PROMESSA PIX">PROMESSA PIX</option>
+                    <option value="ALEGA PAGAMENTO - SEM COMPROVANTE">ALEGA PAGAMENTO - SEM COMPROVANTE</option>
+                    <option value="FALECIDO">FALECIDO</option>
+                    <option value="CLIENTE DESCONHECIDO">CLIENTE DESCONHECIDO</option>
+                    <option value="ROBO SOLICITA ATENDIMENTO HUMANO ">ROBO SOLICITA ATENDIMENTO HUMANO</option>
+                    <option value="TENTATIVA - MAQUINA MENSAGEM AUTOMATICA">TENTATIVA - CAIXA POSTAL</option>
+                    <option value="TENTATIVA - ABANDONO">TENTATIVA - ABANDONO</option>
+                    <option value="TENTATIVA - NÃO ATENDE">TENTATIVA - NÃO ATENDE</option>
+                  </select>
+                </div>
+              </div>
               
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden mt-6">
                 {campaigns.map(c => (
@@ -1027,7 +1138,7 @@ export default function App() {
                       </p>
                     </div>
                     <a 
-                      href={`${BACKEND_URL}/api/campaigns/${c.id}/export`}
+                      href={`${BACKEND_URL}/api/campaigns/${c.id}/export?occurrence=${exportOccurrenceFilter !== 'all' ? encodeURIComponent(exportOccurrenceFilter) : ''}`}
                       className="flex items-center gap-1.5 px-4 py-2 bg-vero-magenta text-white text-xs font-semibold rounded-lg hover:bg-rose-700 transition"
                     >
                       <Download size={14} />

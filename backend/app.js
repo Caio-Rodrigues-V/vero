@@ -70,6 +70,31 @@ app.get('/api/dashboard/stats', (req, res) => {
 });
 
 /**
+ * Rota para obter o resumo de ocorrências agrupadas para a dashboard
+ */
+app.get('/api/dashboard/occurrences', (req, res) => {
+  const { campaignId } = req.query;
+  try {
+    let query = `
+      SELECT occurrence, COUNT(id) as count
+      FROM leads
+      WHERE occurrence IS NOT NULL
+    `;
+    const params = [];
+    if (campaignId && campaignId !== 'all') {
+      query += ' AND campaign_id = ?';
+      params.push(campaignId);
+    }
+    query += ' GROUP BY occurrence ORDER BY count DESC';
+
+    const occurrences = all(query, params);
+    res.json(occurrences);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Listar todas as campanhas
  */
 app.get('/api/campaigns', (req, res) => {
@@ -135,17 +160,24 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
 });
 
 /**
- * Exportar resultados da campanha em formato CSV
+ * Exportar resultados da campanha em formato CSV (suporta filtro por ocorrência)
  */
 app.get('/api/campaigns/:id/export', (req, res) => {
   const { id } = req.params;
+  const { occurrence } = req.query;
   try {
     const campaign = get('SELECT name FROM campaigns WHERE id = ?', [id]);
     if (!campaign) {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    const leads = all('SELECT name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
+    let query = 'SELECT name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?';
+    const params = [id];
+    if (occurrence && occurrence !== 'all') {
+      query += ' AND occurrence = ?';
+      params.push(occurrence);
+    }
+    const leads = all(query, params);
 
     let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
     
