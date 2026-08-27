@@ -2,28 +2,30 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 /**
- * Dispara a mensagem SMS/RCS diretamente usando a API da Smart RCS.
+ * Dispara a mensagem SMS diretamente usando a API da Unipix.
  * 
  * @param {object} lead - O objeto do lead
  * @returns {Promise<{success: boolean, log: string}>}
  */
-async function triggerSmartRcs(lead) {
-  const apiKey = process.env.SMART_RCS_API_KEY;
-  const sender = process.env.SMART_RCS_SENDER || 'rcs_grupoddm';
-  const apiUrl = 'https://developer.smartrcs.com.br/api/Message/text';
+async function triggerUnipixSms(lead) {
+  const username = process.env.UNIPIX_USERNAME;
+  const password = process.env.UNIPIX_PASSWORD;
+  const centroCustoId = process.env.UNIPIX_CENTRO_CUSTO_ID || '123';
+  const produtoId = process.env.UNIPIX_PRODUTO_ID || '34';
+  const apiUrl = 'https://api-sms-cliente.unipix.com.br/v2/api/campanha/simples';
 
   // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
   const targetPhone = process.env.TEST_PHONE || lead.phone;
   if (process.env.TEST_PHONE) {
-    console.log(`[Smart RCS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+    console.log(`[Unipix SMS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
   }
 
-  // Se a chave não estiver configurada no .env, roda no modo simulado (Mock)
-  if (!apiKey) {
-    console.log(`[Smart RCS MOCK] API Key não configurada. Simulando envio para ${targetPhone}`);
+  // Se o usuário/senha não estiver configurado no .env, roda no modo simulado (Mock)
+  if (!username || !password) {
+    console.log(`[Unipix SMS MOCK] Usuário/Senha não configurados. Simulando envio para ${targetPhone}`);
     return {
       success: true,
-      log: `[SIMULATED Smart RCS] Mensagem simulada enviada com sucesso para ${targetPhone}.`
+      log: `[SIMULATED Unipix SMS] Mensagem simulada enviada com sucesso para ${targetPhone}.`
     };
   }
 
@@ -35,7 +37,7 @@ async function triggerSmartRcs(lead) {
 
   // Se não houver código de barras, gera aviso para não tentar enviar SMS vazio
   if (!lead.barcode) {
-    console.log(`[Smart RCS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
+    console.log(`[Unipix SMS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
     return {
       success: false,
       log: 'Cancelado: Lead não possui linha digitável.'
@@ -48,43 +50,51 @@ async function triggerSmartRcs(lead) {
   const messageText = `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}`;
 
   try {
-    console.log(`[Smart RCS] Enviando mensagem para ${cleanedPhone}...`);
+    console.log(`[Unipix SMS] Enviando mensagem para ${cleanedPhone}...`);
     
+    const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Api-Key': apiKey
+        'Authorization': authHeader
       },
       body: JSON.stringify({
-        sender: sender,
-        destinations: [
+        centroCustoId: parseInt(centroCustoId, 10),
+        envios: [
           {
-            to: cleanedPhone,
-            messageid: String(lead.id)
+            mensagemNumero: messageText,
+            numero: cleanedPhone,
+            smsClienteId: String(lead.id)
           }
         ],
-        text: messageText,
-        fallback: true
+        mensagemCampanha: "",
+        nome: "Vero Cobrança",
+        produtoId: parseInt(produtoId, 10),
+        telefones: ""
       })
     });
 
     const responseText = await response.text();
 
     if (!response.ok) {
-      throw new Error(`Erro API Smart RCS: ${response.status} - ${responseText}`);
+      throw new Error(`Erro API Unipix: ${response.status} - ${responseText}`);
     }
 
-    console.log(`[Smart RCS] Mensagem enviada com sucesso para ${cleanedPhone}. Resposta: ${responseText}`);
+    const data = JSON.parse(responseText);
+    const smsId = data.smsEnvios && data.smsEnvios[0] ? data.smsEnvios[0].smsId : (data.id || 'N/A');
+
+    console.log(`[Unipix SMS] Mensagem enviada com sucesso para ${cleanedPhone}. ID: ${smsId}`);
     return {
       success: true,
-      log: `[Smart RCS] Enviado via gateway. ID da Mensagem: ${lead.id}`
+      log: `[Unipix SMS] Enviado com sucesso. ID: ${smsId}`
     };
   } catch (error) {
-    console.error(`[Smart RCS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
+    console.error(`[Unipix SMS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
     return {
       success: false,
-      log: `[Smart RCS] Falha no envio: ${error.message}`
+      log: `[Unipix SMS] Falha no envio: ${error.message}`
     };
   }
 }
@@ -224,6 +234,6 @@ async function sendLocawebEmail(lead) {
 }
 
 module.exports = { 
-  triggerN8NSmsWebhook: triggerSmartRcs,
+  triggerN8NSmsWebhook: triggerUnipixSms,
   sendLocawebEmail
 };
