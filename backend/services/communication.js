@@ -108,7 +108,7 @@ async function triggerUnipixSms(lead) {
 async function sendLocawebEmail(lead) {
   const token = process.env.LOCAWEB_TOKEN || '45790aba479f30ec65f106995d8e7424';
   const fromName = process.env.LOCAWEB_FROM_NAME || 'Vero Internet';
-  const fromEmail = process.env.LOCAWEB_FROM || 'comunicado@envios.ddm.adv.br';
+  const fromEmail = process.env.LOCAWEB_FROM || 'verointernet@grupoddm.com.br';
   const apiUrl = 'https://api.smtplw.com.br/v1/messages';
 
   if (!lead.email || !lead.email.includes('@')) {
