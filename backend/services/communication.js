@@ -32,6 +32,7 @@ async function triggerN8NSmsWebhook(lead) {
         phone: lead.phone,
         debt_value: lead.debt_value,
         due_date: lead.due_date,
+        barcode: lead.barcode || '',
         type: 'sms_rcs'
       }),
     });

@@ -36,6 +36,7 @@ function initDb() {
       phone TEXT NOT NULL,
       debt_value REAL NOT NULL,
       due_date TEXT,
+      barcode TEXT, -- Linha Digitável / Código de barras / PIX
       call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'completed', 'failed'
       call_attempts INTEGER DEFAULT 0,
       call_log TEXT,
@@ -44,6 +45,13 @@ function initDb() {
       FOREIGN KEY(campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     );
   `);
+
+  // Executar migração para bancos de dados existentes
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN barcode TEXT;");
+  } catch (err) {
+    // Ignorar erro se a coluna já existir no banco do cPanel
+  }
 }
 
 // Helper para executar queries que não retornam dados

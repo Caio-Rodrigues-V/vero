@@ -145,9 +145,9 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    const leads = all('SELECT name, phone, debt_value, due_date, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
+    const leads = all('SELECT name, phone, debt_value, due_date, barcode, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
 
-    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
+    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
     
     for (const lead of leads) {
       const row = [
@@ -155,6 +155,7 @@ app.get('/api/campaigns/:id/export', (req, res) => {
         `"${lead.phone}"`,
         lead.debt_value,
         `"${lead.due_date || ''}"`,
+        `"${lead.barcode || ''}"`,
         `"${lead.call_status}"`,
         `"${(lead.call_log || '').replace(/"/g, '""')}"`,
         `"${lead.sms_status}"`,
@@ -280,13 +281,13 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
 
     // 3. Inserir os leads em lote usando transação nativa para alta performance (suporta 20k+ facilmente)
     const insertLeadStmt = db.prepare(`
-      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date) 
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date, barcode) 
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     const insertTransaction = db.transaction((cId, leadList) => {
       for (const lead of leadList) {
-        insertLeadStmt.run(cId, lead.name, lead.phone, lead.debt_value, lead.due_date);
+        insertLeadStmt.run(cId, lead.name, lead.phone, lead.debt_value, lead.due_date, lead.barcode || null);
       }
     });
 
