@@ -137,7 +137,13 @@ async function makeVapiCall(lead) {
 
   const finalAssistantId = campaignAssistantId || assistantId;
 
-  const phoneE164 = formatE164(lead.phone);
+  // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
+  const targetPhone = process.env.TEST_PHONE || lead.phone;
+  if (process.env.TEST_PHONE) {
+    console.log(`[VAPI - MODO TESTE] Redirecionando chamada do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+  }
+
+  const phoneE164 = formatE164(targetPhone);
   
   // Compilar as variáveis da Verô conforme as regras rígidas de voz
   const valorFaturaText = numberToWordsBRL(lead.debt_value);

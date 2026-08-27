@@ -12,17 +12,23 @@ async function triggerSmartRcs(lead) {
   const sender = process.env.SMART_RCS_SENDER || 'rcs_grupoddm';
   const apiUrl = 'https://developer.smartrcs.com.br/api/Message/text';
 
+  // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
+  const targetPhone = process.env.TEST_PHONE || lead.phone;
+  if (process.env.TEST_PHONE) {
+    console.log(`[Smart RCS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+  }
+
   // Se a chave não estiver configurada no .env, roda no modo simulado (Mock)
   if (!apiKey) {
-    console.log(`[Smart RCS MOCK] API Key não configurada. Simulando envio para ${lead.phone}`);
+    console.log(`[Smart RCS MOCK] API Key não configurada. Simulando envio para ${targetPhone}`);
     return {
       success: true,
-      log: `[SIMULATED Smart RCS] Mensagem simulada enviada com sucesso para ${lead.phone}.`
+      log: `[SIMULATED Smart RCS] Mensagem simulada enviada com sucesso para ${targetPhone}.`
     };
   }
 
   // Limpar telefone (apenas dígitos e com prefixo DDI 55)
-  let cleanedPhone = String(lead.phone).replace(/\D/g, '');
+  let cleanedPhone = String(targetPhone).replace(/\D/g, '');
   if (!cleanedPhone.startsWith('55') && cleanedPhone.length >= 10) {
     cleanedPhone = '55' + cleanedPhone;
   }
