@@ -3,19 +3,18 @@ const fs = require('fs');
 const csvParser = require('csv-parser');
 
 /**
- * Normaliza os cabeçalhos das planilhas para mapear aos campos do banco
- */
-function normalizeHeader(header) {
-  const h = header.toLowerCase().trim()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/[^a-z0-9_]/g, '_'); // substitui espaços por _
-
-  if (['nome', 'name', 'cliente', 'lead', 'usuario'].includes(h)) return 'name';
-  if (['telefone', 'phone', 'celular', 'contato', 'numero', 'tel', 'num'].includes(h)) return 'phone';
-  if (['valor', 'value', 'divida', 'valor_divida', 'debito', 'saldo'].includes(h)) return 'debt_value';
-  if (['vencimento', 'due_date', 'data', 'data_vencimento', 'venc'].includes(h)) return 'due_date';
-  
-  return h;
+  * Detecta se o separador do CSV é vírgula ou ponto e vírgula
+  */
+function detectSeparator(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const firstLine = content.split('\n')[0] || '';
+    const semicolons = (firstLine.match(/;/g) || []).length;
+    const commas = (firstLine.match(/,/g) || []).length;
+    return semicolons > commas ? ';' : ',';
+  } catch (err) {
+    return ';'; // default fallback
+  }
 }
 
 /**
@@ -84,6 +83,69 @@ function cleanDueDate(dateVal) {
 }
 
 /**
+ * Mapeia dinamicamente uma linha genérica para os campos do lead
+ */
+function parseRow(row) {
+  // 1. Encontrar o nome (prioriza 'name', 'nome', depois chaves contendo nome/devedor/cliente)
+  let name = 'Sem Nome';
+  const nameKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'name' || hk === 'nome' || hk.includes('nome') || hk.includes('devedor') || hk.includes('cliente');
+  });
+  if (nameKey && row[nameKey]) {
+    name = String(row[nameKey]).trim();
+  }
+
+  // 2. Encontrar o valor do débito (saldo/valor/divida/debito)
+  let debt_value = 0.0;
+  const debtKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'saldo' || hk === 'valor' || hk === 'debt_value' || hk === 'divida' || hk === 'debito';
+  }) || Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk.includes('saldo') || hk.includes('valor') || hk.includes('divida') || hk.includes('debito');
+  });
+  if (debtKey && row[debtKey]) {
+    debt_value = cleanDebtValue(row[debtKey]);
+  }
+
+  // 3. Encontrar a data de vencimento
+  let due_date = '';
+  const dateKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'vencimento' || hk === 'due_date' || hk === 'venc' || hk === 'data';
+  }) || Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk.includes('vencimento') || hk.includes('due_date') || hk.includes('venc');
+  });
+  if (dateKey && row[dateKey]) {
+    due_date = cleanDueDate(row[dateKey]);
+  }
+
+  // 4. Encontrar telefone (varre fone1, fone2... fone20 e pega o primeiro válido)
+  let phone = '';
+  const phoneKeys = Object.keys(row).filter(k => {
+    const hk = k.toLowerCase().trim();
+    return hk.includes('fone') || hk.includes('phone') || hk.includes('tel') || hk.includes('celular') || hk.includes('contato');
+  });
+
+  // Ordenar numericamentes as chaves (fone1, fone2, fone10...)
+  phoneKeys.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+  for (const k of phoneKeys) {
+    if (row[k]) {
+      const cleaned = cleanPhone(row[k]);
+      if (cleaned.length >= 8) {
+        phone = cleaned;
+        break; // Encontrou o primeiro número de telefone válido, para aqui
+      }
+    }
+  }
+
+  return { name, phone, debt_value, due_date };
+}
+
+/**
  * Lê e analisa arquivos Excel (.xlsx, .xls)
  */
 function parseExcel(filePath) {
@@ -94,46 +156,23 @@ function parseExcel(filePath) {
   // Converter para array de objetos mantendo chaves brutas
   const rawRows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
   
-  return rawRows.map(row => {
-    const normalizedRow = {};
-    for (const key of Object.keys(row)) {
-      const normKey = normalizeHeader(key);
-      normalizedRow[normKey] = row[key];
-    }
-
-    return {
-      name: String(normalizedRow.name || 'Sem Nome').trim(),
-      phone: cleanPhone(normalizedRow.phone),
-      debt_value: cleanDebtValue(normalizedRow.debt_value),
-      due_date: cleanDueDate(normalizedRow.due_date)
-    };
-  }).filter(lead => lead.phone.length >= 8); // Filtrar números inválidos mínimos
+  return rawRows.map(row => parseRow(row)).filter(lead => lead.phone.length >= 8);
 }
 
 /**
  * Lê e analisa arquivos CSV
  */
 function parseCSV(filePath) {
+  const separator = detectSeparator(filePath);
   return new Promise((resolve, reject) => {
     const results = [];
     fs.createReadStream(filePath)
-      .pipe(csvParser())
+      .pipe(csvParser({ separator }))
       .on('data', (row) => {
-        const normalizedRow = {};
-        for (const key of Object.keys(row)) {
-          const normKey = normalizeHeader(key);
-          normalizedRow[normKey] = row[key];
-        }
-        
-        results.push({
-          name: String(normalizedRow.name || 'Sem Nome').trim(),
-          phone: cleanPhone(normalizedRow.phone),
-          debt_value: cleanDebtValue(normalizedRow.debt_value),
-          due_date: cleanDueDate(normalizedRow.due_date)
-        });
+        const parsed = parseRow(row);
+        results.push(parsed);
       })
       .on('end', () => {
-        // Filtrar números inválidos mínimos
         const filtered = results.filter(lead => lead.phone.length >= 8);
         resolve(filtered);
       })
