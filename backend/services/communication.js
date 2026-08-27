@@ -174,18 +174,6 @@ async function sendLocawebEmail(lead) {
               </p>
             </td>
           </tr>
-          <tr>
-            <td style="background-color:#5b1f8f;padding:24px 32px;color:#ffffff;font-size:14px;line-height:1.6;">
-              <p style="margin:0 0 12px 0;font-family:'Poppins',Arial,sans-serif;font-weight:700;font-size:15px;">Fale Conosco</p>
-              <p style="margin:0 0 12px 0;">
-                <strong>Central de Atendimento Vero:</strong> 4000-1020<br>
-                Você também pode emitir segundas vias e gerenciar sua conta pelo aplicativo <strong>Minha Vero</strong>.
-              </p>
-              <a href="https://www.verointernet.com.br" target="_blank" style="display:inline-block;background-color:#ffffff;color:#5b1f8f;text-decoration:none;font-family:'Poppins',Arial,sans-serif;font-weight:600;font-size:14px;padding:10px 20px;border-radius:6px;margin-top:4px;">
-                Acessar Site da Vero
-              </a>
-            </td>
-          </tr>
         </table>
       </td>
     </tr>
