@@ -8,9 +8,18 @@ dotenv.config();
  * @returns {Promise<{success: boolean, log: string}>}
  */
 async function triggerSmartRcs(lead) {
-  const apiKey = process.env.SMART_RCS_API_KEY || '8DD74B20-D556-494E-A6C1-216FCA7796EC';
+  const apiKey = process.env.SMART_RCS_API_KEY;
   const sender = process.env.SMART_RCS_SENDER || 'rcs_grupoddm';
   const apiUrl = 'https://developer.smartrcs.com.br/api/Message/text';
+
+  // Se a chave não estiver configurada no .env, roda no modo simulado (Mock)
+  if (!apiKey) {
+    console.log(`[Smart RCS MOCK] API Key não configurada. Simulando envio para ${lead.phone}`);
+    return {
+      success: true,
+      log: `[SIMULATED Smart RCS] Mensagem simulada enviada com sucesso para ${lead.phone}.`
+    };
+  }
 
   // Limpar telefone (apenas dígitos e com prefixo DDI 55)
   let cleanedPhone = String(lead.phone).replace(/\D/g, '');
