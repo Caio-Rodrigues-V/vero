@@ -31,6 +31,10 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Servir arquivos estáticos do frontend (pasta public)
+const publicPath = path.join(__dirname, 'public');
+app.use(express.static(publicPath));
+
 // Inicializar Banco de Dados e Fila
 initDb();
 startMonitorLoop();
@@ -517,6 +521,21 @@ app.post('/api/vapi-webhook', (req, res) => {
   } catch (error) {
     console.error('[VAPI WEBHOOK ERROR]', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Fallback para qualquer rota que não seja da API (Servir o Single Page Application)
+ */
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  const indexPath = path.join(publicPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.send('Vero Recovery API is running. Frontend build not found in public/.');
   }
 });
 
