@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, 'vero_recovery.db');
-const db = new DatabaseSync(dbPath);
+const db = new Database(dbPath);
 
 // Inicializar as tabelas do banco de dados
 export function initDb() {
