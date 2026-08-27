@@ -40,7 +40,7 @@ async function processCampaign(campaignId) {
         // 1. Atualizar para status temporário de envio
         run(
           `UPDATE leads 
-           SET call_status = 'calling', sms_status = 'sending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Enviando ao n8n...'
+           SET call_status = 'calling', sms_status = 'sending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Enviando via Smart RCS...'
            WHERE id = ?`,
           [lead.id]
         );
@@ -48,14 +48,13 @@ async function processCampaign(campaignId) {
         // 2. Disparar Chamada de voz via VAPI (direto pelo backend)
         const callResult = await makeVapiCall(lead);
 
-        // 3. Disparar SMS/RCS via Webhook do n8n
+        // 3. Disparar SMS/RCS diretamente via API da Smart RCS
         const smsResult = await triggerN8NSmsWebhook(lead);
 
         // 4. Atualizar com os status e logs de disparo iniciais
-        // Se a chamada ou o SMS falharem no disparo inicial, já marcamos como falha.
-        // Se der certo, mantemos 'calling' e 'sending' até os webhooks de callback retornarem.
+        // Como o Smart RCS é direto e síncrono, se tiver sucesso já marcamos como 'completed'.
         const finalCallStatus = callResult.success ? 'calling' : 'failed';
-        const finalSmsStatus = smsResult.success ? 'sending' : 'failed';
+        const finalSmsStatus = smsResult.success ? 'completed' : 'failed';
 
         run(
           `UPDATE leads 

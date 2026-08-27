@@ -2,56 +2,76 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 /**
- * Dispara o Webhook do n8n para enviar o SMS/RCS do lead.
+ * Dispara a mensagem SMS/RCS diretamente usando a API da Smart RCS.
  * 
  * @param {object} lead - O objeto do lead
  * @returns {Promise<{success: boolean, log: string}>}
  */
-async function triggerN8NSmsWebhook(lead) {
-  const n8nUrl = process.env.N8N_WEBHOOK_URL;
-  
-  if (!n8nUrl) {
-    console.log(`[n8n SMS MOCK] Webhook do n8n não configurado. Simulando envio de SMS/RCS para ${lead.name}`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+async function triggerSmartRcs(lead) {
+  const apiKey = process.env.SMART_RCS_API_KEY || '8DD74B20-D556-494E-A6C1-216FCA7796EC';
+  const sender = process.env.SMART_RCS_SENDER || 'rcs_grupoddm';
+  const apiUrl = 'https://developer.smartrcs.com.br/api/Message/text';
+
+  // Limpar telefone (apenas dígitos e com prefixo DDI 55)
+  let cleanedPhone = String(lead.phone).replace(/\D/g, '');
+  if (!cleanedPhone.startsWith('55') && cleanedPhone.length >= 10) {
+    cleanedPhone = '55' + cleanedPhone;
+  }
+
+  // Se não houver código de barras, gera aviso para não tentar enviar SMS vazio
+  if (!lead.barcode) {
+    console.log(`[Smart RCS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
     return {
-      success: true,
-      log: `[SIMULATED] SMS/RCS mock enviado com sucesso.`
+      success: false,
+      log: 'Cancelado: Lead não possui linha digitável.'
     };
   }
 
+  const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
+  
+  // Mensagem padronizada da Vero para envio de boleto
+  const messageText = `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}`;
+
   try {
-    const response = await fetch(n8nUrl, {
+    console.log(`[Smart RCS] Enviando mensagem para ${cleanedPhone}...`);
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Api-Key': apiKey
       },
       body: JSON.stringify({
-        lead_id: lead.id,
-        campaign_id: lead.campaign_id,
-        name: lead.name,
-        phone: lead.phone,
-        debt_value: lead.debt_value,
-        due_date: lead.due_date,
-        barcode: lead.barcode || '',
-        type: 'sms_rcs'
-      }),
+        sender: sender,
+        destinations: [
+          {
+            to: cleanedPhone,
+            messageid: String(lead.id)
+          }
+        ],
+        text: messageText,
+        fallback: true
+      })
     });
 
+    const responseText = await response.text();
+
     if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
+      throw new Error(`Erro API Smart RCS: ${response.status} - ${responseText}`);
     }
 
+    console.log(`[Smart RCS] Mensagem enviada com sucesso para ${cleanedPhone}. Resposta: ${responseText}`);
     return {
       success: true,
-      log: `Webhook n8n SMS/RCS disparado. Status: ${response.status}`
+      log: `[Smart RCS] Enviado via gateway. ID da Mensagem: ${lead.id}`
     };
   } catch (error) {
-    console.error(`[n8n SMS ERROR] Falha no webhook para lead #${lead.id}:`, error.message);
+    console.error(`[Smart RCS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
     return {
       success: false,
-      log: `Erro no n8n SMS/RCS: ${error.message}`
+      log: `[Smart RCS] Falha no envio: ${error.message}`
     };
   }
 }
 
-module.exports = { triggerN8NSmsWebhook };
+module.exports = { triggerN8NSmsWebhook: triggerSmartRcs };
