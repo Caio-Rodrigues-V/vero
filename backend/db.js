@@ -1,8 +1,8 @@
-const Database = require('better-sqlite3');
+const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 
 const dbPath = path.join(__dirname, 'vero_recovery.db');
-const db = new Database(dbPath);
+const db = new DatabaseSync(dbPath);
 
 // Inicializar as tabelas do banco de dados
 function initDb() {
@@ -55,8 +55,8 @@ function run(sql, params = []) {
 // Helper para obter um único registro
 function get(sql, params = []) {
   const stmt = db.prepare(sql);
-  const results = stmt.all(...params);
-  return results.length > 0 ? results[0] : null;
+  const result = stmt.get(...params);
+  return result === undefined ? null : result;
 }
 
 // Helper para obter múltiplos registros
