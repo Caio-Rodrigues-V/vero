@@ -145,9 +145,9 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    const leads = all('SELECT name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
+    const leads = all('SELECT name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
 
-    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
+    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
     
     for (const lead of leads) {
       const row = [
@@ -158,6 +158,7 @@ app.get('/api/campaigns/:id/export', (req, res) => {
         `"${lead.barcode || ''}"`,
         lead.dias_atraso || 0,
         `"${lead.status_internet || ''}"`,
+        `"${lead.occurrence || 'TENTATIVA - NÃO TABULADO'}"`,
         `"${lead.call_status}"`,
         `"${(lead.call_log || '').replace(/"/g, '""')}"`,
         `"${lead.sms_status}"`,
@@ -385,7 +386,7 @@ app.get('/api/sample-file', (req, res) => {
  * Endpoint de callback para o n8n atualizar o status do lead
  */
 app.post('/api/leads/update', (req, res) => {
-  const { lead_id, call_status, call_log, sms_status, sms_log } = req.body;
+  const { lead_id, call_status, call_log, sms_status, sms_log, occurrence } = req.body;
 
   if (!lead_id) {
     return res.status(400).json({ error: 'lead_id é obrigatório.' });
@@ -404,12 +405,13 @@ app.post('/api/leads/update', (req, res) => {
     const newCallLog = call_log !== undefined ? call_log : lead.call_log;
     const newSmsStatus = sms_status || lead.sms_status;
     const newSmsLog = sms_log !== undefined ? sms_log : lead.sms_log;
+    const newOccurrence = occurrence !== undefined ? occurrence : lead.occurrence;
 
     run(
       `UPDATE leads 
-       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ? 
+       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, occurrence = ? 
        WHERE id = ?`,
-      [newCallStatus, newCallLog, newSmsStatus, newSmsLog, lead_id]
+      [newCallStatus, newCallLog, newSmsStatus, newSmsLog, newOccurrence, lead_id]
     );
 
     // Recalcular as estatísticas totais da campanha no banco de forma agregada
@@ -464,6 +466,76 @@ app.post('/api/leads/update', (req, res) => {
 });
 
 /**
+ * Analisador inteligente de conversações para classificar ocorrências baseadas nas regras da Vero
+ */
+function classifyOccurrence(call) {
+  const reason = call.endedReason;
+  const summary = (call.summary || '').toLowerCase();
+  const transcript = (call.transcript || '').toLowerCase();
+  const duration = call.duration || 0;
+
+  // 1. Falhas e tentativas automáticas da operadora
+  if (reason === 'voicemail') {
+    return 'TENTATIVA - MAQUINA MENSAGEM AUTOMATICA';
+  }
+  if (reason === 'no-answer') {
+    return 'TENTATIVA - NÃO ATENDE';
+  }
+  if (reason === 'busy') {
+    return 'TENTATIVA - OCUPADO';
+  }
+  if (reason === 'network-error' || reason === 'error') {
+    return 'TENTATIVA - ERRO DISCAGEM';
+  }
+
+  // 2. Quedas e abandonos rápidos
+  if (reason === 'customer-hung-up' && duration < 8) {
+    return 'TENTATIVA - ABANDONO';
+  }
+
+  const combinedText = `${summary} ${transcript}`;
+
+  // 3. Classificações com base na fala do cliente (CPC)
+  if (combinedText.includes('faleceu') || combinedText.includes('falecimento') || combinedText.includes('morreu') || combinedText.includes('óbito') || combinedText.includes('obito')) {
+    return 'FALECIDO';
+  }
+  if (combinedText.includes('não conhece') || combinedText.includes('numero errado') || combinedText.includes('número errado') || combinedText.includes('não é ele') || combinedText.includes('não é ela') || combinedText.includes('desconhecido') || combinedText.includes('desconhece a pessoa')) {
+    return 'CLIENTE DESCONHECIDO';
+  }
+  if (combinedText.includes('já pagou') || combinedText.includes('ja pagou') || combinedText.includes('pagamento feito') || combinedText.includes('pago')) {
+    return 'ALEGA PAGAMENTO - SEM COMPROVANTE';
+  }
+  if (combinedText.includes('promessa') || combinedText.includes('vou pagar') || combinedText.includes('pago amanhã') || combinedText.includes('pago amanha') || combinedText.includes('aceitou boleto') || combinedText.includes('envia o boleto') || combinedText.includes('envia o sms') || combinedText.includes('mandar o sms') || combinedText.includes('enviar o boleto')) {
+    if (combinedText.includes('pix')) return 'PROMESSA PIX';
+    if (combinedText.includes('cartão') || combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
+    return 'PROMESSA BOLETO';
+  }
+  if (combinedText.includes('desempregado') || combinedText.includes('desempregada') || combinedText.includes('sem emprego')) {
+    return 'NAO PAGARA - DESEMPREGADO';
+  }
+  if (combinedText.includes('cancelamento') || combinedText.includes('cancelar') || combinedText.includes('cancela')) {
+    return 'NÃO PAGARÁ - SOLICITOU O CANCELAMENTO ';
+  }
+  if (combinedText.includes('atendente') || combinedText.includes('humano') || combinedText.includes('pessoa') || combinedText.includes('humana') || combinedText.includes('falar com alguém') || combinedText.includes('falar com alguem')) {
+    return 'ROBO SOLICITA ATENDIMENTO HUMANO ';
+  }
+  if (combinedText.includes('não vai pagar') || combinedText.includes('não vou pagar') || combinedText.includes('não irei pagar') || combinedText.includes('financeiro') || combinedText.includes('sem dinheiro') || combinedText.includes('problema financeiro')) {
+    return 'NÃO PAGARÁ - PROBLEMA FINANCEIRO';
+  }
+  if (combinedText.includes('ligar mais tarde') || combinedText.includes('retornar') || combinedText.includes('outro horário') || combinedText.includes('outro horario') || combinedText.includes('ligue depois')) {
+    return 'RETORNO AGENDADO COM CLIENTE';
+  }
+
+  // 4. Quedas durante a chamada qualificada
+  if (duration >= 8 && (reason === 'customer-hung-up' || reason === 'assistant-hung-up')) {
+    return 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE';
+  }
+
+  // Fallback geral se atendido
+  return 'TENTATIVA - ATENDIMENTO NÃO TABULADO';
+}
+
+/**
  * Endpoint de webhook para receber relatórios da VAPI.ai
  */
 app.post('/api/vapi-webhook', (req, res) => {
@@ -498,13 +570,16 @@ app.post('/api/vapi-webhook', (req, res) => {
     const callStatus = isSuccess ? 'completed' : 'failed';
     
     const logText = `[VAPI] Chamada encerrada. Motivo: ${call.endedReason}. Duração: ${call.duration || 0}s. Resumo: ${call.summary || 'Sem resumo fornecido.'}`;
+    
+    // Classificar ocorrência
+    const occurrence = classifyOccurrence(call);
 
-    // Atualizar o lead
+    // Atualizar o lead com o status, log e ocorrência tabulada
     run(
       `UPDATE leads 
-       SET call_status = ?, call_log = ? 
+       SET call_status = ?, call_log = ?, occurrence = ? 
        WHERE id = ?`,
-      [callStatus, logText, leadId]
+      [callStatus, logText, occurrence, leadId]
     );
 
     // Recalcular as estatísticas totais da campanha no banco

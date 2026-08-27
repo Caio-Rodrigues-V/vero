@@ -38,6 +38,7 @@ interface Lead {
   phone: string;
   debt_value: number;
   due_date: string;
+  occurrence?: string;
   call_status: 'pending' | 'processing' | 'calling' | 'completed' | 'failed';
   call_attempts: number;
   call_log: string;
@@ -302,8 +303,23 @@ export default function App() {
 
         // Disparar atualizações em paralelo para os leads simulados
         const promises = pendingOrProcessing.map(async (l: Lead) => {
-          const callSuccess = Math.random() > 0.15; // 85% de sucesso
+          const callSuccess = Math.random() > 0.20; // 80% de sucesso
           const smsSuccess = Math.random() > 0.05;  // 95% de sucesso
+
+          // Mapear ocorrências simuladas com base no sucesso da chamada
+          let occurrence = 'TENTATIVA - NÃO ATENDE';
+          if (callSuccess) {
+            const rand = Math.random();
+            if (rand < 0.4) occurrence = 'PROMESSA BOLETO';
+            else if (rand < 0.7) occurrence = 'ALEGA PAGAMENTO - SEM COMPROVANTE';
+            else if (rand < 0.85) occurrence = 'ROBO SOLICITA ATENDIMENTO HUMANO ';
+            else occurrence = 'CLIENTE DESCONHECIDO';
+          } else {
+            const rand = Math.random();
+            if (rand < 0.5) occurrence = 'TENTATIVA - MAQUINA MENSAGEM AUTOMATICA';
+            else if (rand < 0.8) occurrence = 'TENTATIVA - ABANDONO';
+            else occurrence = 'TENTATIVA - NÃO ATENDE';
+          }
 
           await fetch(`${BACKEND_URL}/api/leads/update`, {
             method: 'POST',
@@ -312,12 +328,13 @@ export default function App() {
               lead_id: l.id,
               call_status: callSuccess ? 'completed' : 'failed',
               call_log: callSuccess 
-                ? '[SIMULADOR] Chamada atendida. Resolução por VAPI: O devedor confirmou que recebeu o aviso.' 
-                : '[SIMULADOR] Caixa postal ou recusa de chamada.',
+                ? `[SIMULADOR] Chamada atendida. Ocorrência: ${occurrence}.` 
+                : `[SIMULADOR] Chamada não completada. Ocorrência: ${occurrence}.`,
               sms_status: smsSuccess ? 'completed' : 'failed',
               sms_log: smsSuccess 
                 ? '[SIMULADOR] RCS Entregue e Lido' 
-                : '[SIMULADOR] Falha na rede RCS / Operadora.'
+                : '[SIMULADOR] Falha na rede RCS / Operadora.',
+              occurrence: occurrence
             })
           });
         });
@@ -884,6 +901,7 @@ export default function App() {
                       <th className="py-3 px-4">Telefone</th>
                       <th className="py-3 px-4">Valor</th>
                       <th className="py-3 px-4">Vencimento</th>
+                      <th className="py-3 px-4">Ocorrência (Tabulação)</th>
                       <th className="py-3 px-4">Status VAPI (Ligação)</th>
                       <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status RCS</th>
@@ -898,6 +916,11 @@ export default function App() {
                           <td className="py-3 px-4">{l.phone}</td>
                           <td className="py-3 px-4 font-bold text-slate-700">{formatBRL(l.debt_value)}</td>
                           <td className="py-3 px-4">{l.due_date}</td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 bg-rose-50 text-vero-magenta rounded border border-rose-100 font-bold text-[10px]">
+                              {l.occurrence || 'AGUARDANDO CONTATO'}
+                            </span>
+                          </td>
                           
                           {/* Status Ligação */}
                           <td className="py-3 px-4">

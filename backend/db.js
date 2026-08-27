@@ -39,6 +39,7 @@ function initDb() {
       barcode TEXT, -- Linha Digitável / Código de barras / PIX
       dias_atraso INTEGER, -- Dias em atraso
       status_internet TEXT, -- Status da internet / contrato
+      occurrence TEXT, -- Tabulação / Ocorrência final
       call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'completed', 'failed'
       call_attempts INTEGER DEFAULT 0,
       call_log TEXT,
@@ -57,6 +58,9 @@ function initDb() {
   } catch (err) {}
   try {
     db.exec("ALTER TABLE leads ADD COLUMN status_internet TEXT;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE leads ADD COLUMN occurrence TEXT;");
   } catch (err) {}
 }
 
