@@ -68,7 +68,7 @@ interface DashboardStats {
   total_failed_sms: number;
 }
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = window.location.origin.includes('localhost:5173') ? 'http://localhost:3001' : window.location.origin;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'campaigns' | 'leads' | 'reports'>('dashboard');
@@ -561,7 +561,7 @@ export default function App() {
                 {/* Resumo da Campanha Ativa (Lado Direito - 1/3) */}
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between lg:col-span-1">
                   <div>
-                    <h3 className="text-base font-bold text-slate-800 mb-4">Campanha Ativa no n8n</h3>
+                    <h3 className="text-base font-bold text-slate-800 mb-4">Campanha Ativa</h3>
                     {campaigns.filter(c => c.status === 'processing').length > 0 ? (
                       campaigns.filter(c => c.status === 'processing').map(c => {
                         const pct = Math.round((c.processed_leads / c.total_leads) * 100);
