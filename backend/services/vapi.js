@@ -222,6 +222,15 @@ async function makeVapiCall(lead) {
     body.assistantOverrides = {
       recordingEnabled: true,
       firstMessage: firstMessage,
+      model: {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        systemPrompt: systemPrompt
+      },
+      voice: {
+        provider: "playht",
+        voiceId: "susan"
+      },
       variableValues: {
         nome_cliente: lead.name,
         valor_fatura: valorFaturaText,
