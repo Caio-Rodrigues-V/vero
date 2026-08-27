@@ -263,10 +263,21 @@ app.get('/api/vapi/assistants', async (req, res) => {
     }
 
     const assistants = await response.json();
-    const mapped = assistants.map(ast => ({
+    let mapped = assistants.map(ast => ({
       id: ast.id,
       name: ast.name || `Assistente (${ast.id})`
     }));
+
+    // Se houver VAPI_ASSISTANT_ID definido no .env, exibe apenas ele no dropdown
+    const configAssistantId = process.env.VAPI_ASSISTANT_ID;
+    if (configAssistantId) {
+      const found = mapped.find(ast => ast.id === configAssistantId);
+      if (found) {
+        mapped = [found];
+      } else {
+        mapped = [{ id: configAssistantId, name: `Assistente Configurado (${configAssistantId})` }];
+      }
+    }
 
     res.json(mapped);
   } catch (error) {
