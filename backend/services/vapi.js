@@ -220,12 +220,7 @@ async function makeVapiCall(lead) {
       recordingEnabled: true,
       firstMessage: firstMessage,
       model: {
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          }
-        ]
+        systemPrompt: systemPrompt
       },
       variableValues: {
         nome_cliente: lead.name,
@@ -244,12 +239,7 @@ async function makeVapiCall(lead) {
       model: {
         provider: "openai",
         model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          }
-        ]
+        systemPrompt: systemPrompt
       },
       voice: {
         provider: "playht",
