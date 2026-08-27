@@ -312,10 +312,14 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const insertTransaction = db.transaction((cId, leadList) => {
-      for (const lead of leadList) {
+    console.log(`[SERVER] Inserindo ${leads.length} leads no banco de dados para a campanha #${campaignId}...`);
+    const startTime = Date.now();
+
+    run('BEGIN TRANSACTION');
+    try {
+      for (const lead of leads) {
         insertLeadStmt.run(
-          cId, 
+          campaignId, 
           lead.name, 
           lead.phone, 
           lead.debt_value, 
@@ -325,11 +329,12 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
           lead.status_internet || null
         );
       }
-    });
-
-    console.log(`[SERVER] Inserindo ${leads.length} leads no banco de dados para a campanha #${campaignId}...`);
-    const startTime = Date.now();
-    insertTransaction(campaignId, leads);
+      run('COMMIT');
+    } catch (err) {
+      run('ROLLBACK');
+      throw err;
+    }
+    
     console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms.`);
 
     res.json({
