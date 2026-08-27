@@ -1,0 +1,1013 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  LayoutDashboard, 
+  Megaphone, 
+  Users, 
+  FileSpreadsheet, 
+  UploadCloud, 
+  Play, 
+  CheckCircle2, 
+  AlertTriangle, 
+  XCircle, 
+  Download, 
+  RefreshCw, 
+  Trash2, 
+  Search, 
+  ChevronLeft, 
+  ChevronRight,
+  Sparkles
+} from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend 
+} from 'recharts';
+
+// Interfaces para os tipos de dados
+interface Campaign {
+  id: number;
+  name: string;
+  status: 'processing' | 'completed' | 'failed';
+  total_leads: number;
+  processed_leads: number;
+  successful_calls: number;
+  failed_calls: number;
+  successful_sms: number;
+  failed_sms: number;
+  created_at: string;
+}
+
+interface Lead {
+  id: number;
+  campaign_id: number;
+  name: string;
+  phone: string;
+  debt_value: number;
+  due_date: string;
+  call_status: 'pending' | 'processing' | 'calling' | 'completed' | 'failed';
+  call_attempts: number;
+  call_log: string;
+  sms_status: 'pending' | 'processing' | 'sending' | 'completed' | 'failed';
+  sms_log: string;
+}
+
+interface DashboardStats {
+  total_campaigns: number;
+  total_leads: number;
+  total_processed: number;
+  total_successful_calls: number;
+  total_failed_calls: number;
+  total_successful_sms: number;
+  total_failed_sms: number;
+}
+
+const BACKEND_URL = 'http://localhost:3001';
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'campaigns' | 'leads' | 'reports'>('dashboard');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({
+    total_campaigns: 0,
+    total_leads: 0,
+    total_processed: 0,
+    total_successful_calls: 0,
+    total_failed_calls: 0,
+    total_successful_sms: 0,
+    total_failed_sms: 0,
+  });
+
+  // Upload state
+  const [campaignName, setCampaignName] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
+  const [vapiAssistants, setVapiAssistants] = useState<{ id: string, name: string }[]>([]);
+  const [selectedVapiAssistantId, setSelectedVapiAssistantId] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Selected Campaign for Leads view
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [leadsTotalPages, setLeadsTotalPages] = useState(1);
+  const [leadsTotalCount, setLeadsTotalCount] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Simulation state
+  const [simulating, setSimulating] = useState(false);
+
+  // Fetch initial data
+  useEffect(() => {
+    fetchStats();
+    fetchCampaigns();
+    fetchVapiAssistants();
+  }, []);
+
+  const fetchVapiAssistants = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/vapi/assistants`);
+      if (res.ok) {
+        const data = await res.json();
+        setVapiAssistants(data);
+        if (data.length > 0) {
+          setSelectedVapiAssistantId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching VAPI assistants:', err);
+    }
+  };
+
+  // Poll for campaign updates if there is a processing campaign
+  useEffect(() => {
+    const hasActiveCampaign = campaigns.some(c => c.status === 'processing');
+    let interval: NodeJS.Timeout;
+
+    if (hasActiveCampaign) {
+      interval = setInterval(() => {
+        fetchCampaigns();
+        fetchStats();
+        if (selectedCampaignId) {
+          fetchLeads(selectedCampaignId, leadsPage);
+        }
+      }, 2000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [campaigns, selectedCampaignId, leadsPage]);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    }
+  };
+
+  const fetchCampaigns = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns`);
+      if (res.ok) {
+        const data = await res.json();
+        setCampaigns(data);
+        if (data.length > 0 && selectedCampaignId === null) {
+          setSelectedCampaignId(data[0].id);
+          fetchLeads(data[0].id, 1);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching campaigns:', err);
+    }
+  };
+
+  const fetchLeads = async (campaignId: number, page: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data.leads);
+        setLeadsTotalPages(data.pagination.totalPages);
+        setLeadsTotalCount(data.pagination.totalLeads);
+      }
+    } catch (err) {
+      console.error('Error fetching leads:', err);
+    }
+  };
+
+  const handleCampaignSelect = (id: number) => {
+    setSelectedCampaignId(id);
+    setLeadsPage(1);
+    fetchLeads(id, 1);
+  };
+
+  const handleFileUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) {
+      setUploadError('Por favor, selecione uma planilha.');
+      return;
+    }
+    if (!campaignName.trim()) {
+      setUploadError('Por favor, digite o nome da campanha.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadError('');
+    setUploadSuccess('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('campaignName', campaignName);
+    formData.append('vapiAssistantId', selectedVapiAssistantId);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao enviar planilha');
+      }
+
+      setUploadSuccess(data.message);
+      setCampaignName('');
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      
+      fetchCampaigns();
+      fetchStats();
+      if (data.campaignId) {
+        setSelectedCampaignId(data.campaignId);
+        fetchLeads(data.campaignId, 1);
+      }
+    } catch (err: any) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCancelCampaign = async (id: number) => {
+    if (!confirm('Deseja realmente cancelar/pausar esta campanha?')) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/cancel`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        fetchCampaigns();
+      }
+    } catch (err) {
+      console.error('Error cancelling campaign:', err);
+    }
+  };
+
+  const handleDeleteCampaign = async (id: number) => {
+    if (!confirm('Deseja excluir esta campanha e todos os seus leads?')) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setSelectedCampaignId(null);
+        setLeads([]);
+        fetchCampaigns();
+        fetchStats();
+      }
+    } catch (err) {
+      console.error('Error deleting campaign:', err);
+    }
+  };
+
+  // Simular retorno do webhook do n8n para fins de teste sem webhook real
+  const handleSimulateWebhook = async () => {
+    if (!selectedCampaignId) return;
+    setSimulating(true);
+    
+    try {
+      // Obter leads da campanha selecionada que ainda estão marcados como 'processing' ou 'pending'
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${selectedCampaignId}/leads?page=1&limit=100`);
+      if (res.ok) {
+        const data = await res.json();
+        const pendingOrProcessing = data.leads.filter((l: Lead) => 
+          l.call_status === 'processing' || l.call_status === 'pending'
+        );
+
+        if (pendingOrProcessing.length === 0) {
+          alert('Não há leads pendentes nesta campanha para simular.');
+          setSimulating(false);
+          return;
+        }
+
+        alert(`Simulando resposta do n8n para ${pendingOrProcessing.length} leads. Isso atualizará os status para Concluído/Falha em lotes...`);
+
+        // Disparar atualizações em paralelo para os leads simulados
+        const promises = pendingOrProcessing.map(async (l: Lead) => {
+          const callSuccess = Math.random() > 0.15; // 85% de sucesso
+          const smsSuccess = Math.random() > 0.05;  // 95% de sucesso
+
+          await fetch(`${BACKEND_URL}/api/leads/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lead_id: l.id,
+              call_status: callSuccess ? 'completed' : 'failed',
+              call_log: callSuccess 
+                ? '[SIMULADOR] Chamada atendida. Resolução por VAPI: O devedor confirmou que recebeu o aviso.' 
+                : '[SIMULADOR] Caixa postal ou recusa de chamada.',
+              sms_status: smsSuccess ? 'completed' : 'failed',
+              sms_log: smsSuccess 
+                ? '[SIMULADOR] RCS Entregue e Lido' 
+                : '[SIMULADOR] Falha na rede RCS / Operadora.'
+            })
+          });
+        });
+
+        await Promise.all(promises);
+        fetchCampaigns();
+        fetchStats();
+        fetchLeads(selectedCampaignId, leadsPage);
+      }
+    } catch (err) {
+      console.error('Erro na simulação do webhook:', err);
+    } finally {
+      setSimulating(false);
+    }
+  };
+
+  const formatBRL = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
+  // Filtrar leads na memória para pesquisa rápida por nome/telefone
+  const filteredLeads = leads.filter(l => 
+    l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    l.phone.includes(searchTerm)
+  );
+
+  // Dados para gráficos de exemplo
+  const mockWeeklyStats = [
+    { name: 'Seg', Valor: 12000, Contatos: 56 },
+    { name: 'Ter', Valor: 15400, Contatos: 72 },
+    { name: 'Qua', Valor: 24500, Contatos: 112 },
+    { name: 'Qui', Valor: 14000, Contatos: 68 },
+    { name: 'Sex', Valor: 19800, Contatos: 80 },
+    { name: 'Sáb', Valor: 18200, Contatos: 76 },
+    { name: 'Dom', Valor: 4000, Contatos: 23 },
+  ];
+
+  return (
+    <div className="flex min-h-screen bg-vero-bg">
+      {/* Sidebar Lateral */}
+      <aside className="w-64 bg-vero-darker text-white flex flex-col justify-between shrink-0">
+        <div>
+          {/* Logo Vero */}
+          <div className="p-6 border-b border-slate-800 flex flex-col items-start gap-1">
+            <img 
+              src="/logo_vero.svg" 
+              alt="Logo Vero" 
+              className="h-6 w-auto object-contain"
+            />
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+              Debt Recovery
+            </span>
+          </div>
+
+          {/* Menus */}
+          <nav className="p-4 space-y-1">
+            <button 
+              onClick={() => setActiveTab('dashboard')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === 'dashboard' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <LayoutDashboard size={18} />
+              Painel de Controle
+            </button>
+            <button 
+              onClick={() => setActiveTab('campaigns')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === 'campaigns' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <Megaphone size={18} />
+              Campanhas
+            </button>
+            <button 
+              onClick={() => setActiveTab('leads')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === 'leads' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <Users size={18} />
+              Visualizador de Leads
+            </button>
+            <button 
+              onClick={() => setActiveTab('reports')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === 'reports' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <FileSpreadsheet size={18} />
+              Relatórios
+            </button>
+          </nav>
+        </div>
+
+      </aside>
+
+      {/* Conteúdo Principal */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Top Header */}
+        <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shrink-0">
+          <h2 className="text-xl font-bold text-slate-800">
+            {activeTab === 'dashboard' && 'Painel de Controle - Recuperação de Dívidas'}
+            {activeTab === 'campaigns' && 'Gerenciamento de Campanhas'}
+            {activeTab === 'leads' && 'Leads Importados'}
+            {activeTab === 'reports' && 'Exportação de Relatórios'}
+          </h2>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => { fetchStats(); fetchCampaigns(); }}
+              className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+            >
+              <RefreshCw size={14} />
+              Sincronizar
+            </button>
+            <span className="text-xs text-slate-400">Status da API: <strong className="text-green-500">Conectado</strong></span>
+          </div>
+        </header>
+
+        {/* Área de Visualização */}
+        <div className="p-8 flex-1 space-y-8">
+          
+          {/* TAB 1: DASHBOARD */}
+          {activeTab === 'dashboard' && (
+            <>
+              {/* Cards de Métricas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">Campanhas Criadas</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <span className="text-3xl font-extrabold text-slate-800">{stats.total_campaigns}</span>
+                    <span className="bg-vero-magenta/10 text-vero-magenta text-xs font-bold px-2 py-0.5 rounded">Ativas</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">Leads Carregados</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <span className="text-3xl font-extrabold text-slate-800">{stats.total_leads ? stats.total_leads.toLocaleString() : 0}</span>
+                    <span className="text-slate-400 text-xs">Total acumulado</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">Ligações por VAPI</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <span className="text-3xl font-extrabold text-slate-800">
+                      {stats.total_successful_calls ? stats.total_successful_calls.toLocaleString() : 0}
+                    </span>
+                    <span className="text-green-500 text-xs font-bold flex items-center gap-0.5">
+                      ✓ {stats.total_processed ? Math.round((stats.total_successful_calls / stats.total_processed) * 100 || 0) : 0}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">SMS (RCS) Enviados</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <span className="text-3xl font-extrabold text-slate-800">
+                      {stats.total_successful_sms ? stats.total_successful_sms.toLocaleString() : 0}
+                    </span>
+                    <span className="text-green-500 text-xs font-bold flex items-center gap-0.5">
+                      ✓ {stats.total_processed ? Math.round((stats.total_successful_sms / stats.total_processed) * 100 || 0) : 0}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Principal do Painel */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Tabela de Campanhas Recentes (Lado Esquerdo - 2/3) */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4 lg:col-span-2">
+                  <h3 className="text-base font-bold text-slate-800">Campanhas Recentes</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                          <th className="py-3 px-4">Nome da Campanha</th>
+                          <th className="py-3 px-4">Data de Criação</th>
+                          <th className="py-3 px-4 text-center">Total Leads</th>
+                          <th className="py-3 px-4">Progresso Geral</th>
+                          <th className="py-3 px-4 text-center">Ligações</th>
+                          <th className="py-3 px-4 text-center">RCS</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {campaigns.length > 0 ? (
+                          campaigns.map(c => {
+                            const pct = c.total_leads > 0 ? Math.round((c.processed_leads / c.total_leads) * 100) : 0;
+                            return (
+                              <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-3.5 px-4 font-semibold text-slate-700">{c.name}</td>
+                                <td className="py-3.5 px-4">{new Date(c.created_at).toLocaleDateString('pt-BR')}</td>
+                                <td className="py-3.5 px-4 text-center font-medium">{c.total_leads.toLocaleString()}</td>
+                                <td className="py-3.5 px-4 w-1/5">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-full bg-slate-100 rounded-full h-2">
+                                      <div 
+                                        className="bg-vero-magenta h-2 rounded-full" 
+                                        style={{ width: `${pct}%` }}
+                                      ></div>
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-700">{pct}%</span>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 text-center text-xs">
+                                  <span className="text-green-600 font-semibold">{c.successful_calls}</span>
+                                  <span className="text-slate-300 mx-1">/</span>
+                                  <span className="text-red-500 font-semibold">{c.failed_calls}</span>
+                                </td>
+                                <td className="py-3.5 px-4 text-center text-xs">
+                                  <span className="text-green-600 font-semibold">{c.successful_sms}</span>
+                                  <span className="text-slate-300 mx-1">/</span>
+                                  <span className="text-red-500 font-semibold">{c.failed_sms}</span>
+                                </td>
+                                <td className="py-3.5 px-4 text-center">
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    c.status === 'completed' && 'bg-green-50 text-green-700'
+                                  } ${
+                                    c.status === 'processing' && 'bg-amber-50 text-amber-700 animate-pulse'
+                                  } ${
+                                    c.status === 'failed' && 'bg-red-50 text-red-700'
+                                  }`}>
+                                    {c.status === 'completed' && 'Concluído'}
+                                    {c.status === 'processing' && 'Processando'}
+                                    {c.status === 'failed' && 'Interrompido'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-slate-400">
+                              Nenhuma campanha encontrada no banco de dados.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Resumo da Campanha Ativa (Lado Direito - 1/3) */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between lg:col-span-1">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800 mb-4">Campanha Ativa no n8n</h3>
+                    {campaigns.filter(c => c.status === 'processing').length > 0 ? (
+                      campaigns.filter(c => c.status === 'processing').map(c => {
+                        const pct = Math.round((c.processed_leads / c.total_leads) * 100);
+                        return (
+                          <div key={c.id} className="space-y-4">
+                            <div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="font-semibold text-slate-700">{c.name}</span>
+                                <span className="font-bold text-vero-magenta">{pct}%</span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-3">
+                                <div 
+                                  className="bg-vero-magenta h-3 rounded-full transition-all duration-500" 
+                                  style={{ width: `${pct}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs text-slate-400 mt-1 block">
+                                {c.processed_leads.toLocaleString()} de {c.total_leads.toLocaleString()} leads enviados
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
+                              <div>
+                                <span className="text-slate-400 block">Ligações OK</span>
+                                <strong className="text-slate-800 text-base">{c.successful_calls}</strong>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block">Falhas Chamada</span>
+                                <strong className="text-red-500 text-base">{c.failed_calls}</strong>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block">RCS OK</span>
+                                <strong className="text-slate-800 text-base">{c.successful_sms}</strong>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block">Falhas RCS</span>
+                                <strong className="text-red-500 text-base">{c.failed_sms}</strong>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => handleCancelCampaign(c.id)}
+                                className="w-full py-2 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition"
+                              >
+                                Parar Disparos
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+                        <CheckCircle2 size={36} className="text-slate-300 mb-2" />
+                        <p className="text-sm">Nenhuma campanha em execução no momento.</p>
+                        <button 
+                          onClick={() => setActiveTab('campaigns')}
+                          className="mt-4 text-xs font-semibold text-vero-magenta hover:underline"
+                        >
+                          Criar Nova Campanha →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Painel do Simulador de n8n no Dashboard */}
+                  {campaigns.some(c => c.status === 'processing') && (
+                    <div className="mt-6 border-t border-slate-100 pt-4 bg-purple-50/50 p-3 rounded-lg border border-purple-100">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-purple-700 mb-2">
+                        <Sparkles size={14} />
+                        Simulador de Teste Rápido
+                      </div>
+                      <p className="text-[11px] text-purple-600/90 mb-3 leading-relaxed">
+                        Seu backend está configurado para mandar leads ao n8n. Clique abaixo para simular que o n8n concluiu as ligações.
+                      </p>
+                      <button 
+                        onClick={handleSimulateWebhook}
+                        disabled={simulating}
+                        className="w-full py-2 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        {simulating ? 'Processando simulação...' : 'Simular Retorno do n8n (Webhook)'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* TAB 2: CAMPANHAS (Upload e Controle) */}
+          {activeTab === 'campaigns' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              
+              {/* Card de Envio */}
+              <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm h-fit">
+                <h3 className="text-base font-bold text-slate-800 mb-6">Importar Leads de Cobrança</h3>
+                <form onSubmit={handleFileUpload} className="space-y-6">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Nome da Campanha
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Cobrança Residencial Vencimento Agosto"
+                      value={campaignName}
+                      onChange={(e) => setCampaignName(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-vero-magenta"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Agente de Voz VAPI
+                    </label>
+                    <select 
+                      value={selectedVapiAssistantId} 
+                      onChange={(e) => setSelectedVapiAssistantId(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
+                    >
+                      {vapiAssistants.map(ast => (
+                        <option key={ast.id} value={ast.id}>
+                          {ast.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Planilha (.XLSX, .XLS, .CSV)
+                    </label>
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-vero-magenta transition cursor-pointer bg-slate-50 flex flex-col items-center justify-center space-y-2"
+                    >
+                      <UploadCloud size={32} className="text-slate-400" />
+                      <span className="text-xs text-slate-600 font-semibold block">
+                        {file ? file.name : 'Arraste ou clique para selecionar o arquivo'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        Colunas sugeridas: Nome, Telefone, Valor, Vencimento
+                      </span>
+                      <input 
+                        ref={fileInputRef}
+                        type="file" 
+                        accept=".xlsx,.xls,.csv"
+                        className="hidden" 
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            setFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {uploadError && (
+                    <div className="bg-red-50 text-red-700 text-xs p-3 rounded-lg border border-red-100 flex items-start gap-2">
+                      <AlertTriangle size={16} className="shrink-0" />
+                      <span>{uploadError}</span>
+                    </div>
+                  )}
+
+                  {uploadSuccess && (
+                    <div className="bg-green-50 text-green-700 text-xs p-3 rounded-lg border border-green-100 flex items-start gap-2">
+                      <CheckCircle2 size={16} className="shrink-0" />
+                      <span>{uploadSuccess}</span>
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit"
+                    disabled={uploading}
+                    className="w-full bg-vero-magenta text-white py-3 rounded-lg text-sm font-semibold hover:bg-rose-700 disabled:bg-rose-400 transition flex items-center justify-center gap-2"
+                  >
+                    <Play size={16} />
+                    {uploading ? 'Importando e Enviando...' : 'Criar e Disparar Campanha'}
+                  </button>
+                </form>
+
+                <div className="mt-6 border-t border-slate-100 pt-4 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Quer testar agora?</span>
+                  <a 
+                    href={`${BACKEND_URL}/api/sample-file`}
+                    className="text-vero-magenta font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <Download size={12} />
+                    Baixar planilha modelo
+                  </a>
+                </div>
+              </div>
+
+              {/* Lista Completa das Campanhas */}
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2 space-y-4">
+                <h3 className="text-base font-bold text-slate-800">Listagem de Campanhas</h3>
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                  {campaigns.length > 0 ? (
+                    campaigns.map(c => {
+                      const pct = c.total_leads > 0 ? Math.round((c.processed_leads / c.total_leads) * 100) : 0;
+                      const isSelected = selectedCampaignId === c.id;
+                      return (
+                        <div 
+                          key={c.id} 
+                          className={`p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between md:flex-row md:items-center gap-4 ${
+                            isSelected ? 'border-vero-magenta bg-rose-50/10' : 'border-slate-200 hover:bg-slate-50'
+                          }`}
+                          onClick={() => handleCampaignSelect(c.id)}
+                        >
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-3">
+                              <h4 className="font-bold text-sm text-slate-700">{c.name}</h4>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                c.status === 'completed' && 'bg-green-50 text-green-700 border border-green-200'
+                              } ${
+                                c.status === 'processing' && 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
+                              } ${
+                                c.status === 'failed' && 'bg-red-50 text-red-700 border border-red-200'
+                              }`}>
+                                {c.status === 'completed' && 'Concluído'}
+                                {c.status === 'processing' && 'Enviando p/ n8n'}
+                                {c.status === 'failed' && 'Cancelada'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+                              <span>Total: <strong>{c.total_leads} leads</strong></span>
+                              <span>Data: <strong>{new Date(c.created_at).toLocaleString('pt-BR')}</strong></span>
+                            </div>
+                            <div className="flex items-center gap-2 max-w-sm pt-1">
+                              <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                <div 
+                                  className="bg-vero-magenta h-1.5 rounded-full" 
+                                  style={{ width: `${pct}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500">{pct}%</span>
+                            </div>
+                          </div>
+
+                          {/* Ações */}
+                          <div className="flex items-center gap-2">
+                            {c.status === 'processing' && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleCancelCampaign(c.id); }}
+                                className="px-3 py-1.5 border border-red-200 text-red-600 rounded-md text-xs font-semibold hover:bg-red-50 transition"
+                              >
+                                Pausar
+                              </button>
+                            )}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleDeleteCampaign(c.id); }}
+                              className="p-1.5 text-slate-400 hover:text-red-500 transition hover:bg-red-50 rounded"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-12 text-slate-400">
+                      Nenhuma campanha cadastrada no banco.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 3: LEADS (Visualização Detalhada) */}
+          {activeTab === 'leads' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+              
+              {/* Seletor de Campanha no Topo */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Campanha Selecionada</span>
+                  <select 
+                    value={selectedCampaignId || ''} 
+                    onChange={(e) => handleCampaignSelect(Number(e.target.value))}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
+                  >
+                    {campaigns.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.total_leads} leads)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Pesquisa */}
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Buscar por Nome ou Telefone..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full md:w-64 focus:outline-none focus:border-vero-magenta"
+                  />
+                </div>
+              </div>
+
+              {/* Tabela dos Leads */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                      <th className="py-3 px-4">Nome do Cliente</th>
+                      <th className="py-3 px-4">Telefone</th>
+                      <th className="py-3 px-4">Valor</th>
+                      <th className="py-3 px-4">Vencimento</th>
+                      <th className="py-3 px-4">Status VAPI (Ligação)</th>
+                      <th className="py-3 px-4">Log de Voz VAPI</th>
+                      <th className="py-3 px-4">Status RCS</th>
+                      <th className="py-3 px-4">Log do RCS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredLeads.length > 0 ? (
+                      filteredLeads.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-slate-700">{l.name}</td>
+                          <td className="py-3 px-4">{l.phone}</td>
+                          <td className="py-3 px-4 font-bold text-slate-700">{formatBRL(l.debt_value)}</td>
+                          <td className="py-3 px-4">{l.due_date}</td>
+                          
+                          {/* Status Ligação */}
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded font-bold ${
+                              l.call_status === 'completed' && 'bg-green-50 text-green-700'
+                            } ${
+                              l.call_status === 'processing' && 'bg-amber-50 text-amber-700'
+                            } ${
+                              l.call_status === 'calling' && 'bg-sky-50 text-sky-700 animate-pulse'
+                            } ${
+                              l.call_status === 'failed' && 'bg-red-50 text-red-700'
+                            } ${
+                              l.call_status === 'pending' && 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {l.call_status === 'completed' && 'Atendida'}
+                              {l.call_status === 'processing' && 'Fila n8n'}
+                              {l.call_status === 'calling' && 'Discando...'}
+                              {l.call_status === 'failed' && 'Falhou'}
+                              {l.call_status === 'pending' && 'Aguardando'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.call_log}>
+                            {l.call_log || 'Nenhum registro'}
+                          </td>
+
+                          {/* Status SMS / RCS */}
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded font-bold ${
+                              l.sms_status === 'completed' && 'bg-green-50 text-green-700'
+                            } ${
+                              l.sms_status === 'processing' && 'bg-amber-50 text-amber-700'
+                            } ${
+                              l.sms_status === 'sending' && 'bg-sky-50 text-sky-700 animate-pulse'
+                            } ${
+                              l.sms_status === 'failed' && 'bg-red-50 text-red-700'
+                            } ${
+                              l.sms_status === 'pending' && 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {l.sms_status === 'completed' && 'Entregue'}
+                              {l.sms_status === 'processing' && 'Fila n8n'}
+                              {l.sms_status === 'sending' && 'Enviando...'}
+                              {l.sms_status === 'failed' && 'Falhou'}
+                              {l.sms_status === 'pending' && 'Aguardando'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.sms_log}>
+                            {l.sms_log || 'Nenhum registro'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                          Nenhum lead encontrado para esta busca/campanha.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginação */}
+              <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-xs">
+                <span className="text-slate-400">
+                  Mostrando leads do lote (Total: <strong>{leadsTotalCount}</strong>)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button 
+                    disabled={leadsPage === 1}
+                    onClick={() => { setLeadsPage(p => p - 1); fetchLeads(selectedCampaignId!, leadsPage - 1); }}
+                    className="p-1 border border-slate-200 rounded disabled:opacity-50 hover:bg-slate-50 transition"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="font-semibold text-slate-700">Página {leadsPage} de {leadsTotalPages}</span>
+                  <button 
+                    disabled={leadsPage === leadsTotalPages}
+                    onClick={() => { setLeadsPage(p => p + 1); fetchLeads(selectedCampaignId!, leadsPage + 1); }}
+                    className="p-1 border border-slate-200 rounded disabled:opacity-50 hover:bg-slate-50 transition"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 4: RELATÓRIOS */}
+          {activeTab === 'reports' && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Exportar Campanhas de Recuperação</h3>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
+                Baixe o resultado completo das ligações VAPI e envios de RCS das campanhas finalizadas. O relatório contém as transcrições das chamadas e comprovantes de recebimento de SMS para conciliação em formato CSV adequado para o Excel.
+              </p>
+              
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden mt-6">
+                {campaigns.map(c => (
+                  <div key={c.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition">
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-700">{c.name}</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Criada em {new Date(c.created_at).toLocaleString('pt-BR')} • {c.total_leads} leads processados
+                      </p>
+                    </div>
+                    <a 
+                      href={`${BACKEND_URL}/api/campaigns/${c.id}/export`}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-vero-magenta text-white text-xs font-semibold rounded-lg hover:bg-rose-700 transition"
+                    >
+                      <Download size={14} />
+                      Exportar CSV
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
+    </div>
+  );
+}

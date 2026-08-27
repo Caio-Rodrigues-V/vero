@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --color-vero-magenta: #D63066;
+  --color-vero-dark: #1E293B;
+  --color-vero-darker: #0F172A;
+  --color-vero-light: #F8FAFC;
+  --color-vero-bg: #F1F5F9;
+  
+  --font-sans: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Reset default Vite app layout alignments */
+#root {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  text-align: left !important;
+  min-height: 100vh;
+  display: block !important;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-vero-bg);
+  color: var(--color-vero-darker);
+  margin: 0;
+  font-family: var(--font-sans);
+}

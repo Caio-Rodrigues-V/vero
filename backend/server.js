@@ -1,0 +1,525 @@
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+import db, { initDb, run, get, all } from './db.js';
+import { parseSpreadsheet } from './utils/parser.js';
+import { triggerCampaignProcessor, startMonitorLoop } from './services/campaignExecutor.js';
+import xlsx from 'xlsx';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Garantir que a pasta de uploads existe
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configuração do Multer para Uploads temporários
+const upload = multer({ dest: 'uploads/' });
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(express.json());
+
+// Inicializar Banco de Dados e Fila
+initDb();
+startMonitorLoop();
+
+/**
+ * Rota para obter estatísticas resumidas da Dashboard
+ */
+app.get('/api/dashboard/stats', (req, res) => {
+  try {
+    const stats = get(`
+      SELECT 
+        COUNT(id) as total_campaigns,
+        SUM(total_leads) as total_leads,
+        SUM(processed_leads) as total_processed,
+        SUM(successful_calls) as total_successful_calls,
+        SUM(failed_calls) as total_failed_calls,
+        SUM(successful_sms) as total_successful_sms,
+        SUM(failed_sms) as total_failed_sms
+      FROM campaigns
+    `);
+
+    // Valores padrão se o banco estiver vazio
+    const response = {
+      total_campaigns: stats.total_campaigns || 0,
+      total_leads: stats.total_leads || 0,
+      total_processed: stats.total_processed || 0,
+      total_successful_calls: stats.total_successful_calls || 0,
+      total_failed_calls: stats.total_failed_calls || 0,
+      total_successful_sms: stats.total_successful_sms || 0,
+      total_failed_sms: stats.total_failed_sms || 0,
+    };
+
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Listar todas as campanhas
+ */
+app.get('/api/campaigns', (req, res) => {
+  try {
+    const campaigns = all('SELECT * FROM campaigns ORDER BY created_at DESC');
+    res.json(campaigns);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Obter uma campanha específica e suas estatísticas
+ */
+app.get('/api/campaigns/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    const campaign = get('SELECT * FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+    res.json(campaign);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Obter leads de uma campanha específica (paginado)
+ */
+app.get('/api/campaigns/:id/leads', (req, res) => {
+  const { id } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 50;
+  const offset = (page - 1) * limit;
+
+  try {
+    const campaign = get('SELECT id FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    const leads = all(
+      'SELECT * FROM leads WHERE campaign_id = ? ORDER BY id ASC LIMIT ? OFFSET ?',
+      [id, limit, offset]
+    );
+
+    const totalLeadsRow = get('SELECT COUNT(id) as total FROM leads WHERE campaign_id = ?', [id]);
+    const totalLeads = totalLeadsRow ? totalLeadsRow.total : 0;
+
+    res.json({
+      leads,
+      pagination: {
+        page,
+        limit,
+        totalLeads,
+        totalPages: Math.ceil(totalLeads / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Exportar resultados da campanha em formato CSV
+ */
+app.get('/api/campaigns/:id/export', (req, res) => {
+  const { id } = req.params;
+  try {
+    const campaign = get('SELECT name FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    const leads = all('SELECT name, phone, debt_value, due_date, call_status, call_log, sms_status, sms_log FROM leads WHERE campaign_id = ?', [id]);
+
+    let csvContent = 'Nome,Telefone,Valor Divida,Data Vencimento,Status Chamada,Log Chamada,Status SMS,Log SMS\r\n';
+    
+    for (const lead of leads) {
+      const row = [
+        `"${lead.name.replace(/"/g, '""')}"`,
+        `"${lead.phone}"`,
+        lead.debt_value,
+        `"${lead.due_date || ''}"`,
+        `"${lead.call_status}"`,
+        `"${(lead.call_log || '').replace(/"/g, '""')}"`,
+        `"${lead.sms_status}"`,
+        `"${(lead.sms_log || '').replace(/"/g, '""')}"`
+      ];
+      csvContent += row.join(',') + '\r\n';
+    }
+
+    const filename = `resultado_campanha_${id}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(Buffer.from('\uFEFF' + csvContent, 'utf-8')); // Adiciona BOM para abrir corretamente no Excel
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Cancelar ou Pausar uma campanha ativa
+ */
+app.post('/api/campaigns/:id/cancel', (req, res) => {
+  const { id } = req.params;
+  try {
+    const campaign = get('SELECT status FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+
+    if (campaign.status === 'processing') {
+      run('UPDATE campaigns SET status = "failed" WHERE id = ?', [id]);
+      res.json({ success: true, message: 'Campanha cancelada/interrompida com sucesso.' });
+    } else {
+      res.status(400).json({ error: 'Apenas campanhas em processamento podem ser canceladas.' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Excluir uma campanha e seus leads
+ */
+app.delete('/api/campaigns/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    run('DELETE FROM campaigns WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Campanha excluída com sucesso.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Rota para buscar os assistentes cadastrados na VAPI
+ */
+app.get('/api/vapi/assistants', async (req, res) => {
+  const apiKey = process.env.VAPI_API_KEY;
+
+  if (!apiKey) {
+    // Retorna opções de teste se não houver chave no .env
+    return res.json([
+      { id: 'vapi_residencia_cobrança', name: 'Vero Residencial - Cobrança Padrão' },
+      { id: 'vapi_empresa_cobrança', name: 'Vero PME - Cobrança Empresas' }
+    ]);
+  }
+
+  try {
+    const response = await fetch('https://api.vapi.ai/assistant', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro VAPI HTTP: ${response.status}`);
+    }
+
+    const assistants = await response.json();
+    const mapped = assistants.map(ast => ({
+      id: ast.id,
+      name: ast.name || `Assistente (${ast.id})`
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('[VAPI ASSISTANTS FETCH ERROR]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Subir planilha e iniciar disparo de campanha
+ */
+app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+  }
+
+  const { campaignName } = req.body;
+  if (!campaignName || campaignName.trim() === '') {
+    return res.status(400).json({ error: 'O nome da campanha é obrigatório.' });
+  }
+
+  const filePath = req.file.path;
+
+  try {
+    // 1. Processar a planilha
+    const leads = await parseSpreadsheet(filePath, req.file.originalname);
+    
+    if (leads.length === 0) {
+      return res.status(400).json({ error: 'A planilha não contém leads válidos com números de telefone.' });
+    }
+
+    const { vapiAssistantId } = req.body;
+
+    // 2. Inserir campanha no banco
+    const campaignResult = run(
+      'INSERT INTO campaigns (name, status, vapi_assistant_id, total_leads) VALUES (?, ?, ?, ?)',
+      [campaignName.trim(), 'processing', vapiAssistantId || null, leads.length]
+    );
+    const campaignId = campaignResult.lastInsertRowid;
+
+    // 3. Inserir os leads em lote usando transação nativa para alta performance (suporta 20k+ facilmente)
+    const insertLeadStmt = db.prepare(`
+      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date) 
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const insertTransaction = db.transaction((cId, leadList) => {
+      for (const lead of leadList) {
+        insertLeadStmt.run(cId, lead.name, lead.phone, lead.debt_value, lead.due_date);
+      }
+    });
+
+    console.log(`[SERVER] Inserindo ${leads.length} leads no banco de dados para a campanha #${campaignId}...`);
+    const startTime = Date.now();
+    insertTransaction(campaignId, leads);
+    console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms.`);
+
+    // 4. Iniciar processamento assíncrono em background
+    triggerCampaignProcessor();
+
+    res.json({
+      success: true,
+      campaignId,
+      totalLeads: leads.length,
+      message: `Campanha criada com ${leads.length} leads. Disparos iniciados.`
+    });
+
+  } catch (error) {
+    console.error('[UPLOAD ERROR]', error);
+    res.status(500).json({ error: `Falha ao processar arquivo: ${error.message}` });
+  } finally {
+    // Remover o arquivo temporário
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+});
+
+/**
+ * Rota para baixar planilha modelo (Exemplo de teste)
+ */
+app.get('/api/sample-file', (req, res) => {
+  const sampleData = [
+    { Nome: 'Carlos Silva', Telefone: '11999998888', Valor: 150.90, Vencimento: '10/08/2026' },
+    { Nome: 'Mariana Souza', Telefone: '21988887777', Valor: 220.00, Vencimento: '15/08/2026' },
+    { Nome: 'Joao Oliveira', Telefone: '31977776666', Valor: 89.90, Vencimento: '05/08/2026' },
+    { Nome: 'Beatriz Costa', Telefone: '11966665555', Valor: 450.50, Vencimento: '20/08/2026' },
+    { Nome: 'Pedro Santos', Telefone: '11955554444', Valor: 120.00, Vencimento: '12/08/2026' }
+  ];
+
+  const wb = xlsx.utils.book_new();
+  const ws = xlsx.utils.json_to_sheet(sampleData);
+  xlsx.utils.book_append_sheet(wb, ws, 'Leads Exemplo');
+
+  const tempFilePath = path.join(uploadDir, 'modelo_leads.xlsx');
+  xlsx.writeFile(wb, tempFilePath);
+
+  res.download(tempFilePath, 'modelo_leads.xlsx', () => {
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+  });
+});
+
+/**
+ * Endpoint de callback para o n8n atualizar o status do lead
+ */
+app.post('/api/leads/update', (req, res) => {
+  const { lead_id, call_status, call_log, sms_status, sms_log } = req.body;
+
+  if (!lead_id) {
+    return res.status(400).json({ error: 'lead_id é obrigatório.' });
+  }
+
+  try {
+    const lead = get('SELECT * FROM leads WHERE id = ?', [lead_id]);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead não encontrado.' });
+    }
+
+    const campaignId = lead.campaign_id;
+
+    // Valores novos ou mantidos
+    const newCallStatus = call_status || lead.call_status;
+    const newCallLog = call_log !== undefined ? call_log : lead.call_log;
+    const newSmsStatus = sms_status || lead.sms_status;
+    const newSmsLog = sms_log !== undefined ? sms_log : lead.sms_log;
+
+    run(
+      `UPDATE leads 
+       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ? 
+       WHERE id = ?`,
+      [newCallStatus, newCallLog, newSmsStatus, newSmsLog, lead_id]
+    );
+
+    // Recalcular as estatísticas totais da campanha no banco de forma agregada
+    const stats = get(`
+      SELECT 
+        COUNT(id) as total,
+        SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) as successful_calls,
+        SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
+        SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms,
+        SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
+        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
+      FROM leads
+      WHERE campaign_id = ?
+    `, [campaignId]);
+
+    run(`
+      UPDATE campaigns 
+      SET processed_leads = ?,
+          successful_calls = ?,
+          failed_calls = ?,
+          successful_sms = ?,
+          failed_sms = ?
+      WHERE id = ?
+    `, [
+      stats.processed || 0,
+      stats.successful_calls || 0,
+      stats.failed_calls || 0,
+      stats.successful_sms || 0,
+      stats.failed_sms || 0,
+      campaignId
+    ]);
+
+    // Verificar se todos os leads desta campanha foram finalizados
+    const pendingLeads = get(`
+      SELECT COUNT(id) as count 
+      FROM leads 
+      WHERE campaign_id = ? 
+        AND (call_status IN ('pending', 'processing', 'calling') 
+             OR sms_status IN ('pending', 'processing', 'sending'))
+    `, [campaignId]);
+
+    if (pendingLeads.count === 0) {
+      run("UPDATE campaigns SET status = 'completed' WHERE id = ?", [campaignId]);
+      console.log(`[SERVER] Campanha #${campaignId} marcada como CONCLUÍDA após retorno do n8n.`);
+    }
+
+    res.json({ success: true, message: 'Status do lead atualizado e métricas recalculadas.' });
+  } catch (error) {
+    console.error('[UPDATE LEAD ERROR]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Endpoint de webhook para receber relatórios da VAPI.ai
+ */
+app.post('/api/vapi-webhook', (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message || message.type !== 'end-of-call-report') {
+      return res.json({ received: true, status: 'ignored_type' });
+    }
+
+    const call = message.call;
+    const metadata = call?.metadata;
+    const leadId = metadata?.lead_id;
+    const campaignId = metadata?.campaign_id;
+
+    if (!leadId) {
+      return res.json({ received: true, status: 'missing_lead_id_in_metadata' });
+    }
+
+    console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${call.endedReason}`);
+
+    // Determinar se a chamada foi atendida / bem-sucedida
+    const successReasons = [
+      'assistant-completed-task', 
+      'customer-ended-call', 
+      'assistant-ended-call', 
+      'customer-hung-up', 
+      'assistant-hung-up'
+    ];
+    
+    const isSuccess = successReasons.includes(call.endedReason) || (call.duration > 5);
+    const callStatus = isSuccess ? 'completed' : 'failed';
+    
+    const logText = `[VAPI] Chamada encerrada. Motivo: ${call.endedReason}. Duração: ${call.duration || 0}s. Resumo: ${call.summary || 'Sem resumo fornecido.'}`;
+
+    // Atualizar o lead
+    run(
+      `UPDATE leads 
+       SET call_status = ?, call_log = ? 
+       WHERE id = ?`,
+      [callStatus, logText, leadId]
+    );
+
+    // Recalcular as estatísticas totais da campanha no banco
+    const stats = get(`
+      SELECT 
+        COUNT(id) as total,
+        SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) as successful_calls,
+        SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
+        SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms,
+        SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
+        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
+      FROM leads
+      WHERE campaign_id = ?
+    `, [campaignId]);
+
+    run(`
+      UPDATE campaigns 
+      SET processed_leads = ?,
+          successful_calls = ?,
+          failed_calls = ?,
+          successful_sms = ?,
+          failed_sms = ?
+      WHERE id = ?
+    `, [
+      stats.processed || 0,
+      stats.successful_calls || 0,
+      stats.failed_calls || 0,
+      stats.successful_sms || 0,
+      stats.failed_sms || 0,
+      campaignId
+    ]);
+
+    // Verificar se todos os leads desta campanha foram finalizados
+    const pendingLeads = get(`
+      SELECT COUNT(id) as count 
+      FROM leads 
+      WHERE campaign_id = ? 
+        AND (call_status IN ('pending', 'processing', 'calling') 
+             OR sms_status IN ('pending', 'processing', 'sending'))
+    `, [campaignId]);
+
+    if (pendingLeads.count === 0) {
+      run("UPDATE campaigns SET status = 'completed' WHERE id = ?", [campaignId]);
+      console.log(`[SERVER] Campanha #${campaignId} marcada como CONCLUÍDA após retorno da VAPI.`);
+    }
+
+    res.json({ success: true, message: 'Webhook VAPI processado com sucesso.' });
+
+  } catch (error) {
+    console.error('[VAPI WEBHOOK ERROR]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
+});
