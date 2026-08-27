@@ -209,7 +209,7 @@ async function makeVapiCall(lead) {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
     },
-    serverUrl: webhookUrl
+    server: { url: webhookUrl, timeoutSeconds: 20 }
   };
 
   // Se o usuário especificou um ID de número da VAPI para fazer a chamada externa
@@ -223,7 +223,6 @@ async function makeVapiCall(lead) {
     body.assistantOverrides = {
       recordingEnabled: true,
       firstMessage: firstMessage,
-      serverUrl: webhookUrl,
       server: { url: webhookUrl, timeoutSeconds: 20 },
       model: {
         provider: "openai",
@@ -244,7 +243,6 @@ async function makeVapiCall(lead) {
     body.assistant = {
       name: "Verô - Vero Cobrança",
       firstMessage: firstMessage,
-      serverUrl: webhookUrl,
       server: { url: webhookUrl, timeoutSeconds: 20 },
       model: {
         provider: "openai",
