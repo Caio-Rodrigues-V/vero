@@ -220,6 +220,8 @@ async function makeVapiCall(lead) {
       recordingEnabled: true,
       firstMessage: firstMessage,
       model: {
+        provider: "openai",
+        model: "gpt-4o-mini",
         systemPrompt: systemPrompt
       },
       variableValues: {
