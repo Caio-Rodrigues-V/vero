@@ -106,14 +106,14 @@ function parseRow(row) {
     name = String(row[nameKey]).trim();
   }
 
-  // 2. Encontrar o valor do débito (saldo/valor/divida/debito)
+  // 2. Encontrar o valor do débito (saldo/valor/divida/debito/nominal)
   let debt_value = 0.0;
   const debtKey = Object.keys(row).find(k => {
     const hk = k.toLowerCase().trim();
-    return hk === 'saldo' || hk === 'valor' || hk === 'debt_value' || hk === 'divida' || hk === 'debito';
+    return hk === 'saldo' || hk === 'valor' || hk === 'debt_value' || hk === 'divida' || hk === 'debito' || hk === 'val_nominal' || hk === 'val_atualizado_avista' || hk.includes('nominal');
   }) || Object.keys(row).find(k => {
     const hk = k.toLowerCase().trim();
-    return hk.includes('saldo') || hk.includes('valor') || hk.includes('divida') || hk.includes('debito');
+    return hk.includes('saldo') || hk.includes('valor') || hk.includes('divida') || hk.includes('debito') || hk.includes('nominal') || hk.startsWith('val_');
   });
   if (debtKey && row[debtKey]) {
     debt_value = cleanDebtValue(row[debtKey]);
