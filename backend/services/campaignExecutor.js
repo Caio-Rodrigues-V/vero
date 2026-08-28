@@ -19,7 +19,7 @@ async function processCampaign(campaignId) {
   try {
     while (activeJobs.has(campaignId)) {
       // 1. Verificar se a campanha ainda está 'processing'
-      const campaign = get('SELECT status, concurrency_limit FROM campaigns WHERE id = ?', [campaignId]);
+      const campaign = get('SELECT status, concurrency_limit, dialer_provider FROM campaigns WHERE id = ?', [campaignId]);
       if (!campaign || campaign.status !== 'processing') {
         console.log(`[EXECUTOR] Campanha #${campaignId} foi pausada ou finalizada. Interrompendo robô.`);
         activeJobs.delete(campaignId);
@@ -58,7 +58,7 @@ async function processCampaign(campaignId) {
         break;
       }
 
-      const provider = (process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
+      const provider = (campaign.dialer_provider || process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
 
       // 4. Marcar o lead como 'calling' no banco temporariamente
       run(

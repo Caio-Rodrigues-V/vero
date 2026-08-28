@@ -45,6 +45,12 @@ function initDb() {
   }
 
   try {
+    db.exec("ALTER TABLE campaigns ADD COLUMN dialer_provider TEXT DEFAULT 'vapi';");
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
+  try {
     db.exec('ALTER TABLE campaigns ADD COLUMN concurrency_limit INTEGER DEFAULT 2;');
   } catch (e) {
     // Ignorar se a coluna já existir

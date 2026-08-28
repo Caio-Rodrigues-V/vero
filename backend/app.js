@@ -428,6 +428,73 @@ app.get('/api/vapi/phone-numbers', async (req, res) => {
 });
 
 /**
+ * Listar Agentes cadastrados na Retell AI
+ */
+app.get('/api/retell/agents', async (req, res) => {
+  const apiKey = process.env.RETELL_API_KEY || 'key_a5dbdb38e3718d2aaa70862d1ad8';
+
+  try {
+    const response = await fetch('https://api.retellai.com/list-agents', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro Retell HTTP: ${response.status}`);
+    }
+
+    const agents = await response.json();
+    const mapped = agents.map(ast => ({
+      id: ast.agent_id,
+      name: `${ast.agent_name || 'Agente Retell'} (${ast.agent_id.slice(0, 10)})`
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('Erro ao buscar agentes Retell:', error);
+    res.json([
+      { id: 'agent_7bc0f8110f1a29b6f4c0151320', name: 'Julia Agent (agent_7bc0f8)' }
+    ]);
+  }
+});
+
+/**
+ * Listar Telefones / Troncos SIP cadastrados na Retell AI
+ */
+app.get('/api/retell/phone-numbers', async (req, res) => {
+  const apiKey = process.env.RETELL_API_KEY || 'key_a5dbdb38e3718d2aaa70862d1ad8';
+
+  try {
+    const response = await fetch('https://api.retellai.com/list-phone-numbers', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro Retell HTTP: ${response.status}`);
+    }
+
+    const phoneNumbers = await response.json();
+    const mapped = phoneNumbers.map(pn => ({
+      id: pn.phone_number,
+      name: `${pn.nickname || 'Linha Retell'} (${pn.phone_number_pretty || pn.phone_number})`
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('Erro ao buscar phone numbers Retell:', error);
+    res.json([
+      { id: '551153301578', name: 'Oktor (551153301578)' },
+      { id: '+5521984354821', name: 'Caio (+5521984354821)' }
+    ]);
+  }
+});
+
+/**
  * Upload de planilha e criação de nova campanha
  */
 app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
@@ -450,12 +517,13 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'A planilha não contém leads válidos com números de telefone.' });
     }
 
-    const { vapiAssistantId, vapiPhoneNumberId } = req.body;
+    const { dialerProvider, vapiAssistantId, vapiPhoneNumberId } = req.body;
+    const provider = (dialerProvider || 'vapi').toLowerCase();
 
     // 2. Inserir campanha no banco (status inicial como 'pending')
     const campaignResult = run(
-      'INSERT INTO campaigns (name, status, vapi_assistant_id, vapi_phone_number_id, total_leads) VALUES (?, ?, ?, ?, ?)',
-      [campaignName.trim(), 'pending', vapiAssistantId || null, vapiPhoneNumberId || null, leads.length]
+      'INSERT INTO campaigns (name, status, dialer_provider, vapi_assistant_id, vapi_phone_number_id, total_leads) VALUES (?, ?, ?, ?, ?, ?)',
+      [campaignName.trim(), 'pending', provider, vapiAssistantId || null, vapiPhoneNumberId || null, leads.length]
     );
     const campaignId = campaignResult.lastInsertRowid;
 

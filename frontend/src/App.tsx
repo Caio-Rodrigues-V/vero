@@ -102,6 +102,11 @@ export default function App() {
   const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
   const [exportOccurrenceFilter, setExportOccurrenceFilter] = useState<string>('all');
   
+  // Dialer Provider (VAPI vs Retell AI)
+  const [dialerProvider, setDialerProvider] = useState<'vapi' | 'retell'>('vapi');
+  const [retellAgents, setRetellAgents] = useState<{ id: string; name: string }[]>([]);
+  const [retellPhoneNumbers, setRetellPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
+
   // Phone Numbers / Troncos SIP VAPI
   const [vapiPhoneNumbers, setVapiPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
   const [selectedVapiPhoneNumberId, setSelectedVapiPhoneNumberId] = useState<string>('');
@@ -117,6 +122,8 @@ export default function App() {
     fetchCampaigns();
     fetchVapiAssistants();
     fetchVapiPhoneNumbers();
+    fetchRetellAgents();
+    fetchRetellPhoneNumbers();
     fetchOccurrences('all');
     fetchSystemInfo();
   }, []);
@@ -127,9 +134,36 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSystemInfo(data);
+        if (data.dialerProvider) {
+          setDialerProvider(data.dialerProvider);
+        }
       }
     } catch (err) {
       console.error('Error fetching system info:', err);
+    }
+  };
+
+  const fetchRetellAgents = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/retell/agents`);
+      if (res.ok) {
+        const data = await res.json();
+        setRetellAgents(data);
+      }
+    } catch (err) {
+      console.error('Error fetching Retell agents:', err);
+    }
+  };
+
+  const fetchRetellPhoneNumbers = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/retell/phone-numbers`);
+      if (res.ok) {
+        const data = await res.json();
+        setRetellPhoneNumbers(data);
+      }
+    } catch (err) {
+      console.error('Error fetching Retell phone numbers:', err);
     }
   };
 
@@ -263,6 +297,7 @@ export default function App() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('campaignName', campaignName);
+    formData.append('dialerProvider', dialerProvider);
     formData.append('vapiAssistantId', selectedVapiAssistantId);
     formData.append('vapiPhoneNumberId', selectedVapiPhoneNumberId);
 
@@ -828,35 +863,65 @@ export default function App() {
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Agente de Voz VAPI
+                      Plataforma de Discagem
+                    </label>
+                    <select 
+                      value={dialerProvider} 
+                      onChange={(e) => setDialerProvider(e.target.value as 'vapi' | 'retell')}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
+                    >
+                      <option value="vapi">VAPI.ai (Plataforma VAPI)</option>
+                      <option value="retell">Retell AI (Plataforma Retell)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Agente de Voz {dialerProvider === 'retell' ? 'Retell AI' : 'VAPI'}
                     </label>
                     <select 
                       value={selectedVapiAssistantId} 
                       onChange={(e) => setSelectedVapiAssistantId(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
                     >
-                      {vapiAssistants.map(ast => (
-                        <option key={ast.id} value={ast.id}>
-                          {ast.name}
-                        </option>
-                      ))}
+                      {dialerProvider === 'retell' ? (
+                        retellAgents.map(ast => (
+                          <option key={ast.id} value={ast.id}>
+                            {ast.name}
+                          </option>
+                        ))
+                      ) : (
+                        vapiAssistants.map(ast => (
+                          <option key={ast.id} value={ast.id}>
+                            {ast.name}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Linha / Tronco Telefônico (BINA)
+                      Linha / Tronco Telefônico (BINA {dialerProvider === 'retell' ? 'Retell' : 'VAPI'})
                     </label>
                     <select 
                       value={selectedVapiPhoneNumberId} 
                       onChange={(e) => setSelectedVapiPhoneNumberId(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
                     >
-                      {vapiPhoneNumbers.map(pn => (
-                        <option key={pn.id} value={pn.id}>
-                          {pn.name}
-                        </option>
-                      ))}
+                      {dialerProvider === 'retell' ? (
+                        retellPhoneNumbers.map(pn => (
+                          <option key={pn.id} value={pn.id}>
+                            {pn.name}
+                          </option>
+                        ))
+                      ) : (
+                        vapiPhoneNumbers.map(pn => (
+                          <option key={pn.id} value={pn.id}>
+                            {pn.name}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 
