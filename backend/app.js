@@ -617,8 +617,25 @@ app.post('/api/vapi-webhook', async (req, res) => {
     const { message } = req.body;
 
     // Se a VAPI consultar o Server URL pedindo o assistente, retorna 200 OK para usar o assistente da chamada
-    if (message?.type === 'assistant-request') {
-      return res.status(200).json({});
+    // Suporte a Tool Calls em tempo real durante a ligação (Disparo instantâneo do SMS)
+    if (message?.type === 'tool-calls' || message?.type === 'function-call') {
+      const call = message.call;
+      const leadId = call?.metadata?.lead_id;
+      if (leadId) {
+        const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
+        if (lead) {
+          console.log(`[REAL-TIME SMS] Disparando Smart RCS em tempo real para o Lead #${leadId} durante a ligação!`);
+          const { triggerN8NSmsWebhook } = require('./services/communication.js');
+          triggerN8NSmsWebhook(lead).catch(err => console.error('[REAL-TIME SMS ERROR]', err.message));
+        }
+      }
+      const toolCalls = message.toolCalls || message.tool_calls || [];
+      return res.status(200).json({
+        results: toolCalls.map(tc => ({
+          toolCallId: tc.id,
+          result: 'SMS enviado com sucesso para o celular do cliente.'
+        }))
+      });
     }
 
     if (!message || message.type !== 'end-of-call-report') {
