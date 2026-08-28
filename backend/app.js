@@ -287,6 +287,25 @@ app.post('/api/campaigns/:id/start', (req, res) => {
 });
 
 /**
+ * Recalcular estatísticas e alinhar envios reais de SMS da campanha ativa
+ */
+app.post('/api/admin/recalculate-stats', (req, res) => {
+  try {
+    const c = get('SELECT id FROM campaigns ORDER BY id DESC LIMIT 1');
+    if (c) {
+      run(
+        'UPDATE leads SET sms_status = ?, sms_log = ? WHERE campaign_id = ? AND (occurrence IS NULL OR occurrence NOT IN (?, ?, ?))', 
+        ['failed', 'Não enviado: Chamada encerrada antes da confirmação.', c.id, 'PROMESSA BOLETO', 'PROMESSA PIX', 'PROMESSA CARTÃO']
+      );
+      updateCampaignStats(c.id);
+    }
+    res.json({ success: true, message: 'Estatísticas da campanha alinhadas e recalculadas com sucesso.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Excluir uma campanha e seus leads
  */
 app.delete('/api/campaigns/:id', (req, res) => {
