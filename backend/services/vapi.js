@@ -211,9 +211,27 @@ async function makeVapiCall(lead) {
     }
   };
 
-  // Se o usuário especificou um ID de número da VAPI para fazer a chamada externa
-  if (phoneNumberId) {
-    body.phoneNumberId = phoneNumberId;
+  // Se o número de telefone da VAPI não estiver no .env, buscar automaticamente o ativo na conta VAPI
+  let finalPhoneNumberId = phoneNumberId;
+  if (!finalPhoneNumberId && apiKey) {
+    try {
+      const phoneRes = await fetch('https://api.vapi.ai/phone-number', {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      });
+      if (phoneRes.ok) {
+        const phoneNumbers = await phoneRes.json();
+        if (Array.isArray(phoneNumbers) && phoneNumbers.length > 0) {
+          finalPhoneNumberId = phoneNumbers[0].id;
+          console.log(`[VAPI] Número de saída autodetectado na conta VAPI: ${phoneNumbers[0].number || phoneNumbers[0].id}`);
+        }
+      }
+    } catch (e) {
+      console.warn('[VAPI] Falha ao autodetectar phoneNumberId:', e.message);
+    }
+  }
+
+  if (finalPhoneNumberId) {
+    body.phoneNumberId = finalPhoneNumberId;
   }
 
   // Decidir se usamos um ID existente com os prompts do nosso backend de override ou se criamos inline
