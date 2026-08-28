@@ -30,6 +30,8 @@ app.use(express.json());
 // Endpoint de diagnóstico do sistema
 app.get('/api/system-info', (req, res) => {
   res.json({
+    domain: 'verolembrete.grupoddm.ia.br',
+    serverIp: '129.121.42.250',
     cwd: process.cwd(),
     dirname: __dirname,
     nodeVersion: process.version,
