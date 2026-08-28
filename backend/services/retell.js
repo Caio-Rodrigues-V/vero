@@ -44,7 +44,9 @@ async function makeRetellCall(lead) {
         override_agent_id: campaignAgentId,
         retell_llm_dynamic_variables: {
           nome: lead.name || 'Cliente',
-          valor: lead.debt_amount ? `R$ ${lead.debt_amount}` : 'seu débito pendente',
+          nome_cliente: lead.name || 'Cliente',
+          valor: lead.debt_value ? `R$ ${lead.debt_value}` : 'seu débito pendente',
+          valor_fatura: lead.debt_value ? `R$ ${lead.debt_value}` : 'seu débito pendente',
           vencimento: lead.due_date || 'data recente',
           contrato: lead.contract_number || 'N/A'
         }
