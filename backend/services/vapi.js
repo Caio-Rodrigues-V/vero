@@ -208,7 +208,8 @@ async function makeVapiCall(lead) {
     metadata: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
-    }
+    },
+    serverUrl: webhookUrl
   };
 
   // Se o número de telefone da VAPI não estiver no .env, buscar automaticamente o ativo na conta VAPI
