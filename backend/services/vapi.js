@@ -274,6 +274,8 @@ async function makeVapiCall(lead) {
   }
 
   try {
+    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${finalPhoneNumberId || 'Nenhum'}`);
+
     const response = await fetch('https://api.vapi.ai/call/phone', {
       method: 'POST',
       headers: {
