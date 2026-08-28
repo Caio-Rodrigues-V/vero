@@ -242,7 +242,9 @@ async function makeVapiCall(lead) {
       serverUrl: webhookUrl,
       recordingEnabled: true,
       variableValues: {
+        NOME_DEV: lead.name,
         nome_cliente: lead.name,
+        VAL_NOMINAL: valorFaturaText,
         valor_fatura: valorFaturaText,
         dias_atraso: diasAtrasoText,
         status_internet: statusInternetText,
