@@ -14,8 +14,8 @@ async function processCampaign(campaignId) {
   console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId}`);
 
   try {
-    const maxConcurrentCalls = process.env.MAX_CONCURRENT_CALLS ? parseInt(process.env.MAX_CONCURRENT_CALLS) : 10;
-    const paceDelayMs = process.env.WORKER_DELAY_BETWEEN_CALLS_MS ? parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS) : 500;
+    const maxConcurrentCalls = process.env.MAX_CONCURRENT_CALLS ? parseInt(process.env.MAX_CONCURRENT_CALLS) : 6;
+    const paceDelayMs = process.env.WORKER_DELAY_BETWEEN_CALLS_MS ? parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS) : 2500;
 
     console.log(`[EXECUTOR] Iniciando discador cadenciado para Campanha #${campaignId} (Máx Simultâneo: ${maxConcurrentCalls} canais, Intervalo entre disparos: ${paceDelayMs}ms)`);
 
@@ -32,8 +32,8 @@ async function processCampaign(campaignId) {
       const activeCalls = activeCallsRow ? activeCallsRow.count : 0;
 
       if (activeCalls >= maxConcurrentCalls) {
-        // Todos os canais estão ocupados falando no momento. Aguarda 2 segundos para liberar vaga
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Todos os canais estão ocupados falando no momento. Aguarda 3 segundos para liberar vaga
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         continue;
       }
 
