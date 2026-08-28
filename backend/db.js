@@ -68,6 +68,12 @@ function initDb() {
     // Ignorar se a coluna já existir
   }
 
+  try {
+    db.exec('ALTER TABLE leads ADD COLUMN call_id TEXT;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,6 +98,18 @@ function initDb() {
       FOREIGN KEY(campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     );
   `);
+
+  try {
+    db.exec('ALTER TABLE leads ADD COLUMN transcript TEXT;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
+  try {
+    db.exec('ALTER TABLE leads ADD COLUMN call_id TEXT;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
 
   // Executar migração para bancos de dados existentes
   try { db.exec("ALTER TABLE leads ADD COLUMN barcode TEXT;"); } catch (err) {}

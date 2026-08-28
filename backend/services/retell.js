@@ -60,8 +60,7 @@ async function makeRetellCall(lead) {
       run(
         `UPDATE leads SET 
           call_id = ?, 
-          call_status = 'in_progress', 
-          updated_at = CURRENT_TIMESTAMP 
+          call_status = 'in_progress' 
         WHERE id = ?`,
         [data.call_id, lead.id]
       );
