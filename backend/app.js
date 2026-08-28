@@ -27,6 +27,19 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Endpoint de diagnóstico do sistema
+app.get('/api/system-info', (req, res) => {
+  res.json({
+    cwd: process.cwd(),
+    dirname: __dirname,
+    nodeVersion: process.version,
+    uptimeSeconds: process.uptime(),
+    vapiAssistantId: process.env.VAPI_ASSISTANT_ID,
+    vapiPhoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
+    appBaseUrl: process.env.APP_BASE_URL
+  });
+});
+
 // Servir arquivos estáticos do frontend (pasta public)
 const publicPath = path.join(__dirname, 'public');
 app.use(express.static(publicPath));
