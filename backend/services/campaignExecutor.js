@@ -1,11 +1,12 @@
 const { run, get, all } = require('../db.js');
 const { triggerN8NSmsWebhook } = require('./communication.js');
 const { makeVapiCall } = require('./vapi.js');
+const { makeRetellCall } = require('./retell.js');
 
 const activeJobs = new Set();
 
 /**
- * Processa o envio de leads: Ligação pela VAPI (API direta) e SMS pelo n8n (Webhook)
+ * Processa o envio de leads: Ligação pela VAPI ou Retell AI
  */
 async function processCampaign(campaignId) {
   if (activeJobs.has(campaignId)) return;
@@ -14,32 +15,36 @@ async function processCampaign(campaignId) {
   console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId}`);
 
   try {
-    const maxConcurrentCalls = process.env.MAX_CONCURRENT_CALLS ? parseInt(process.env.MAX_CONCURRENT_CALLS) : 6;
-    const paceDelayMs = process.env.WORKER_DELAY_BETWEEN_CALLS_MS ? parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS) : 2500;
-
-    console.log(`[EXECUTOR] Iniciando discador cadenciado para Campanha #${campaignId} (Máx Simultâneo: ${maxConcurrentCalls} canais, Intervalo entre disparos: ${paceDelayMs}ms)`);
-
-    while (true) {
-      // 1. Verificar se a campanha ainda está ativa
-      const campaign = get("SELECT * FROM campaigns WHERE id = ?", [campaignId]);
+    while (activeJobs.has(campaignId)) {
+      // 1. Verificar se a campanha ainda está 'processing'
+      const campaign = get('SELECT status, concurrency_limit FROM campaigns WHERE id = ?', [campaignId]);
       if (!campaign || campaign.status !== 'processing') {
-        console.log(`[EXECUTOR] Campanha #${campaignId} não está mais em processamento.`);
+        console.log(`[EXECUTOR] Campanha #${campaignId} foi pausada ou finalizada. Interrompendo robô.`);
+        activeJobs.delete(campaignId);
         break;
       }
 
-      // 2. Verificar chamadas em andamento no momento ('calling')
-      const activeCallsRow = get("SELECT COUNT(id) as count FROM leads WHERE campaign_id = ? AND call_status = 'calling'", [campaignId]);
-      const activeCalls = activeCallsRow ? activeCallsRow.count : 0;
+      // 2. Verificar limite de chamadas ativas simultâneas (concorrência)
+      const concurrencyLimit = campaign.concurrency_limit || 2;
+      const activeCallsObj = get(
+        `SELECT COUNT(*) as count FROM leads WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress')`,
+        [campaignId]
+      );
+      const activeCalls = activeCallsObj ? activeCallsObj.count : 0;
 
-      if (activeCalls >= maxConcurrentCalls) {
-        // Todos os canais estão ocupados falando no momento. Aguarda 3 segundos para liberar vaga
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (activeCalls >= concurrencyLimit) {
+        // Aguarda 1 segundo antes de checar novamente a fila de concorrência
+        await new Promise(resolve => setTimeout(resolve, 1000));
         continue;
       }
 
-      // 3. Buscar o próximo lead pendente na fila
+      // 3. Pegar o próximo lead pendente de ligação
       const lead = get(
-        "SELECT * FROM leads WHERE campaign_id = ? AND call_status = 'pending' ORDER BY id ASC LIMIT 1",
+        `SELECT * FROM leads 
+         WHERE campaign_id = ? 
+           AND call_status = 'pending'
+         ORDER BY id ASC 
+         LIMIT 1`,
         [campaignId]
       );
 
@@ -51,17 +56,21 @@ async function processCampaign(campaignId) {
         break;
       }
 
+      const provider = (process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
+
       // 4. Marcar o lead como 'calling' no banco temporariamente
       run(
         `UPDATE leads 
-         SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem VAPI...' 
+         SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem ${provider.toUpperCase()}...' 
          WHERE id = ?`,
         [lead.id]
       );
 
-      // 5. Disparar a chamada para a VAPI (AWAIT para respeitar a fila de canais)
+      // 5. Disparar a chamada para a VAPI ou RETELL AI
       try {
-        const callResult = await makeVapiCall(lead);
+        const callResult = provider === 'retell' 
+          ? await makeRetellCall(lead) 
+          : await makeVapiCall(lead);
 
         if (!callResult.success) {
           const isConcurrencyError = callResult.log && (

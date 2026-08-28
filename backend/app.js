@@ -653,6 +653,21 @@ function classifyOccurrence(call) {
   return 'TENTATIVA - ATENDIMENTO NÃO TABULADO';
 }
 
+const { handleRetellWebhook } = require('./services/retell.js');
+
+/**
+ * Endpoint de webhook para receber eventos da Retell AI
+ */
+app.post('/api/retell-webhook', async (req, res) => {
+  try {
+    const result = await handleRetellWebhook(req.body);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('[RETELL WEBHOOK ERROR]', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * Endpoint de webhook para receber relatórios da VAPI.ai
  */
