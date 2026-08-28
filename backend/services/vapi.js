@@ -209,7 +209,10 @@ async function makeVapiCall(lead) {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
     },
-    serverUrl: webhookUrl
+    serverUrl: webhookUrl,
+    server: {
+      url: webhookUrl
+    }
   };
 
   // Se o número de telefone da VAPI não estiver no .env, buscar automaticamente o ativo na conta VAPI
@@ -240,6 +243,9 @@ async function makeVapiCall(lead) {
     body.assistantId = finalAssistantId;
     body.assistantOverrides = {
       serverUrl: webhookUrl,
+      server: {
+        url: webhookUrl
+      },
       recordingEnabled: true,
       variableValues: {
         NOME_DEV: lead.name,
