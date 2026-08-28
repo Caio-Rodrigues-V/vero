@@ -202,13 +202,19 @@ async function makeVapiCall(lead) {
   const baseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
   const webhookUrl = `${baseUrl}/api/vapi-webhook`;
 
+  // Sanitizar o nome do cliente removendo sufixos de teste como (TESTE PROD)
+  const cleanName = (lead.name || '')
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/TESTE PROD/gi, '')
+    .trim() || lead.name;
+
   // Montar o corpo da requisição exatamente igual ao padrao vapi-caio
   const body = {
     assistantId: finalAssistantId,
     phoneNumberId: phoneNumberId,
     customer: {
       number: phoneE164,
-      name: lead.name
+      name: cleanName
     },
     metadata: {
       lead_id: lead.id,
@@ -216,8 +222,8 @@ async function makeVapiCall(lead) {
     },
     assistantOverrides: {
       variableValues: {
-        NOME_DEV: lead.name,
-        nome_cliente: lead.name,
+        NOME_DEV: cleanName,
+        nome_cliente: cleanName,
         VAL_NOMINAL: valorFaturaText,
         valor_fatura: valorFaturaText,
         dias_atraso: diasAtrasoText,
