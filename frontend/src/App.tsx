@@ -628,19 +628,19 @@ export default function App() {
 
                             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
                               <div>
-                                <span className="text-slate-400 block">Ligações OK</span>
+                                <span className="text-slate-400 block">Ligações Atendidas</span>
                                 <strong className="text-emerald-600 text-base">{c.successful_calls}</strong>
                               </div>
                               <div>
-                                <span className="text-slate-400 block">Não Atendidas</span>
+                                <span className="text-slate-400 block">Ligações Não Atendidas</span>
                                 <strong className="text-slate-500 text-base">{c.failed_calls}</strong>
                               </div>
                               <div>
-                                <span className="text-slate-400 block">RCS OK</span>
+                                <span className="text-slate-400 block">SMS Enviados</span>
                                 <strong className="text-emerald-600 text-base">{c.successful_sms}</strong>
                               </div>
                               <div>
-                                <span className="text-slate-400 block">Não Enviados</span>
+                                <span className="text-slate-400 block">SMS Não Enviados</span>
                                 <strong className="text-slate-500 text-base">{c.failed_sms}</strong>
                               </div>
                             </div>
