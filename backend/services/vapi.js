@@ -222,11 +222,10 @@ async function makeVapiCall(lead) {
     .replace(/TESTE PROD/gi, '')
     .trim() || lead.name;
 
-  // Montar o corpo da requisição incluindo serverUrl para garantia do Webhook VAPI
+  // Montar o corpo da requisição incluindo serverUrl em assistantOverrides para garantia do Webhook VAPI
   const body = {
     assistantId: finalAssistantId,
     phoneNumberId: finalPhoneNumberId,
-    serverUrl: webhookUrl,
     customer: {
       number: phoneE164,
       name: cleanName
@@ -236,6 +235,7 @@ async function makeVapiCall(lead) {
       campaign_id: lead.campaign_id
     },
     assistantOverrides: {
+      serverUrl: webhookUrl,
       variableValues: {
         NOME_DEV: cleanName,
         nome_cliente: cleanName,
