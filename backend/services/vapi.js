@@ -238,6 +238,10 @@ async function makeVapiCall(lead) {
   if (finalAssistantId) {
     body.assistantId = finalAssistantId;
     body.assistantOverrides = {
+      voice: {
+        provider: "azure",
+        voiceId: "pt-BR-FranciscaNeural"
+      },
       serverUrl: webhookUrl,
       server: {
         url: webhookUrl
