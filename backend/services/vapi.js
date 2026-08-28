@@ -140,14 +140,8 @@ async function makeVapiCall(lead) {
 
   const finalAssistantId = campaignAssistantId || assistantId;
 
-  // Redirecionar número secundário de teste para o iPhone ativo se necessário
-  let rawPhone = lead.phone;
-  if (rawPhone && (rawPhone.includes('984354821') || rawPhone.includes('965605687'))) {
-    rawPhone = '5521995367414';
-  }
-
   // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
-  const targetPhone = process.env.TEST_PHONE || rawPhone;
+  const targetPhone = process.env.TEST_PHONE || lead.phone;
   if (process.env.TEST_PHONE) {
     console.log(`[VAPI - MODO TESTE] Redirecionando chamada do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
   }
