@@ -225,9 +225,9 @@ app.get('/api/campaigns/:id/export', (req, res) => {
 });
 
 /**
- * Cancelar ou Pausar uma campanha ativa
+ * Pausar ou Interromper uma campanha ativa
  */
-app.post('/api/campaigns/:id/cancel', (req, res) => {
+app.post(['/api/campaigns/:id/pause', '/api/campaigns/:id/cancel'], (req, res) => {
   const { id } = req.params;
   try {
     const campaign = get('SELECT status FROM campaigns WHERE id = ?', [id]);
@@ -235,12 +235,13 @@ app.post('/api/campaigns/:id/cancel', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    if (campaign.status === 'processing') {
-      run('UPDATE campaigns SET status = "failed" WHERE id = ?', [id]);
-      res.json({ success: true, message: 'Campanha cancelada/interrompida com sucesso.' });
-    } else {
-      res.status(400).json({ error: 'Apenas campanhas em processamento podem ser canceladas.' });
-    }
+    // Marca como pausada no banco
+    run('UPDATE campaigns SET status = "paused" WHERE id = ?', [id]);
+    // Libera os leads que estavam calling de volta para pending para não ficarem travados
+    run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [id]);
+    
+    console.log(`[SERVER] Campanha #${id} foi PAUSADA com sucesso.`);
+    res.json({ success: true, message: 'Campanha pausada com sucesso.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -257,14 +258,13 @@ app.post('/api/campaigns/:id/start', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    if (campaign.status === 'pending' || campaign.status === 'failed' || campaign.status === 'processing' || campaign.status === 'completed') {
-      // Destravar todos os leads da campanha para re-disparo
-      run("UPDATE leads SET call_status = 'pending', sms_status = 'pending', email_status = 'pending' WHERE campaign_id = ?", [id]);
+    if (campaign.status === 'pending' || campaign.status === 'failed' || campaign.status === 'processing' || campaign.status === 'completed' || campaign.status === 'paused') {
+      // Destravar todos os leads pendentes da campanha para disparo
       run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
       // Executa a função assíncrona de processamento em background
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
       triggerCampaignProcessor();
-      res.json({ success: true, message: 'Disparos da campanha iniciados com sucesso.' });
+      res.json({ success: true, message: 'Disparos da campanha iniciados/retomados com sucesso.' });
     } else {
       res.status(400).json({ error: 'Apenas campanhas pendentes ou pausadas podem ser iniciadas.' });
     }
