@@ -155,9 +155,11 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
     const params = [id];
 
     if (statusFilter === 'delivered' || statusFilter === 'completed') {
-      whereClause += " AND (call_status = 'completed' OR sms_status = 'completed')";
+      whereClause += " AND call_status = 'completed'";
+    } else if (statusFilter === 'sms_delivered') {
+      whereClause += " AND sms_status = 'completed'";
     } else if (statusFilter === 'failed') {
-      whereClause += " AND (call_status = 'failed' AND sms_status = 'failed')";
+      whereClause += " AND call_status = 'failed'";
     } else if (statusFilter === 'pending') {
       whereClause += " AND call_status = 'pending'";
     }

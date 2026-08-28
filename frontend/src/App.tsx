@@ -992,7 +992,8 @@ export default function App() {
                       className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
                     >
                       <option value="all">Todos os Leads</option>
-                      <option value="delivered">🟢 Somente Atendidas / Entregues</option>
+                      <option value="delivered">🟢 Somente Ligações Atendidas</option>
+                      <option value="sms_delivered">📲 Somente Smart RCS Entregues</option>
                       <option value="failed">🩶 Não Atendidas</option>
                       <option value="pending">⏳ Pendentes</option>
                     </select>
