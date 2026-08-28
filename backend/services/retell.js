@@ -27,9 +27,12 @@ async function makeRetellCall(lead) {
   if (!phone.startsWith('55')) {
     phone = '55' + phone;
   }
-  phone = '+' + phone;
 
-  console.log(`[RETELL] Disparando chamada para Lead #${lead.id} (${lead.name}) -> ${phone}`);
+  // Formatar o número de destino com o Tech Prefix da Oktor se configurado (ex: 590835521984354821)
+  const techPrefix = process.env.RETELL_TECH_PREFIX || process.env.OKTOR_TECH_PREFIX || '59083';
+  const toNumber = techPrefix ? `${techPrefix}${phone}` : `+${phone}`;
+
+  console.log(`[RETELL] Disparando chamada para Lead #${lead.id} (${lead.name}) -> ${toNumber} (BINA: ${fromNumber})`);
 
   try {
     const response = await fetch('https://api.retellai.com/v2/create-phone-call', {
@@ -40,7 +43,7 @@ async function makeRetellCall(lead) {
       },
       body: JSON.stringify({
         from_number: fromNumber,
-        to_number: phone,
+        to_number: toNumber,
         override_agent_id: campaignAgentId,
         retell_llm_dynamic_variables: {
           nome: lead.name || 'Cliente',
