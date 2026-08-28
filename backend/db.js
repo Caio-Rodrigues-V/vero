@@ -37,6 +37,12 @@ function initDb() {
     // Ignorar se a coluna já existir
   }
 
+  try {
+    db.exec('ALTER TABLE leads ADD COLUMN transcript TEXT;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

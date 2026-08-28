@@ -14,7 +14,10 @@ import {
   Search, 
   ChevronLeft, 
   ChevronRight,
-  Sparkles
+  Sparkles,
+  MessageSquare,
+  X,
+  Filter
 } from 'lucide-react';
 
 // Interfaces para os tipos de dados
@@ -47,6 +50,7 @@ interface Lead {
   sms_log: string;
   email_status?: 'pending' | 'processing' | 'sending' | 'completed' | 'failed';
   email_log?: string;
+  transcript?: string;
 }
 
 interface DashboardStats {
@@ -91,6 +95,8 @@ export default function App() {
   const [leadsTotalPages, setLeadsTotalPages] = useState(1);
   const [leadsTotalCount, setLeadsTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedTranscriptLead, setSelectedTranscriptLead] = useState<Lead | null>(null);
 
   // Ocorrências / Tabulações DDM
   const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
@@ -183,9 +189,9 @@ export default function App() {
     }
   };
 
-  const fetchLeads = async (campaignId: number, page: number) => {
+  const fetchLeads = async (campaignId: number, page: number, currentStatusFilter: string = statusFilter) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10`);
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10&statusFilter=${currentStatusFilter}`);
       if (res.ok) {
         const data = await res.json();
         setLeads(data.leads);
@@ -970,16 +976,38 @@ export default function App() {
                   </select>
                 </div>
 
-                {/* Pesquisa */}
-                <div className="relative">
-                  <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar por Nome ou Telefone..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full md:w-64 focus:outline-none focus:border-vero-magenta"
-                  />
+                {/* Pesquisa e Filtros */}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  {/* Filtro de Status */}
+                  <div className="flex items-center gap-2">
+                    <Filter size={16} className="text-slate-400" />
+                    <select 
+                      value={statusFilter}
+                      onChange={(e) => {
+                        const newFilter = e.target.value;
+                        setStatusFilter(newFilter);
+                        setLeadsPage(1);
+                        if (selectedCampaignId) fetchLeads(selectedCampaignId, 1, newFilter);
+                      }}
+                      className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
+                    >
+                      <option value="all">Todos os Leads</option>
+                      <option value="delivered">🟢 Somente Atendidas / Entregues</option>
+                      <option value="failed">🩶 Não Atendidas</option>
+                      <option value="pending">⏳ Pendentes</option>
+                    </select>
+                  </div>
+
+                  <div className="relative">
+                    <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por Nome ou Telefone..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full sm:w-64 focus:outline-none focus:border-vero-magenta"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -995,6 +1023,7 @@ export default function App() {
                       <th className="py-3 px-4">Vencimento</th>
                       <th className="py-3 px-4">Ocorrência (Tabulação)</th>
                       <th className="py-3 px-4">Status VAPI (Ligação)</th>
+                      <th className="py-3 px-4">Transcrição</th>
                       <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status RCS</th>
                       <th className="py-3 px-4">Log do RCS</th>
@@ -1037,6 +1066,22 @@ export default function App() {
                               {l.call_status === 'pending' && 'Aguardando'}
                             </span>
                           </td>
+
+                          {/* Transcrição */}
+                          <td className="py-3 px-4">
+                            {l.transcript ? (
+                              <button
+                                onClick={() => setSelectedTranscriptLead(l)}
+                                className="px-2 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[10px] font-bold hover:bg-purple-100 transition flex items-center gap-1"
+                              >
+                                <MessageSquare size={12} />
+                                Ver Diálogo
+                              </button>
+                            ) : (
+                              <span className="text-slate-300 text-[10px] italic">Sem áudio</span>
+                            )}
+                          </td>
+
                           <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.call_log}>
                             {l.call_log || 'Nenhum registro'}
                           </td>
@@ -1092,7 +1137,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                        <td colSpan={13} className="py-8 text-center text-slate-400">
                           Nenhum lead encontrado para esta busca/campanha.
                         </td>
                       </tr>
@@ -1183,6 +1228,42 @@ export default function App() {
 
         </div>
       </main>
+
+      {/* Modal de Transcrição */}
+      {selectedTranscriptLead && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">{selectedTranscriptLead.name}</h3>
+                <span className="text-xs text-slate-400">{selectedTranscriptLead.phone} | {formatBRL(selectedTranscriptLead.debt_value)}</span>
+              </div>
+              <button 
+                onClick={() => setSelectedTranscriptLead(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-3 p-3 bg-slate-50 rounded-xl text-xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição Bruta da Ligação VAPI</span>
+              <div className="whitespace-pre-wrap font-mono text-slate-700 leading-relaxed bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                {selectedTranscriptLead.transcript || 'Nenhuma transcrição gravada para esta chamada.'}
+              </div>
+            </div>
+
+            <div className="pt-2 text-right">
+              <button 
+                onClick={() => setSelectedTranscriptLead(null)}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-semibold hover:bg-slate-900 transition"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

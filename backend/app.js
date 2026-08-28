@@ -143,6 +143,7 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 50;
   const offset = (page - 1) * limit;
+  const statusFilter = req.query.statusFilter || 'all';
 
   try {
     const campaign = get('SELECT id FROM campaigns WHERE id = ?', [id]);
@@ -150,12 +151,22 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    const leads = all(
-      'SELECT * FROM leads WHERE campaign_id = ? ORDER BY id ASC LIMIT ? OFFSET ?',
-      [id, limit, offset]
-    );
+    let whereClause = 'WHERE campaign_id = ?';
+    const params = [id];
 
-    const totalLeadsRow = get('SELECT COUNT(id) as total FROM leads WHERE campaign_id = ?', [id]);
+    if (statusFilter === 'delivered' || statusFilter === 'completed') {
+      whereClause += " AND (call_status = 'completed' OR sms_status = 'completed')";
+    } else if (statusFilter === 'failed') {
+      whereClause += " AND (call_status = 'failed' AND sms_status = 'failed')";
+    } else if (statusFilter === 'pending') {
+      whereClause += " AND call_status = 'pending'";
+    }
+
+    const leadsQuery = `SELECT * FROM leads ${whereClause} ORDER BY id ASC LIMIT ? OFFSET ?`;
+    const leads = all(leadsQuery, [...params, limit, offset]);
+
+    const countQuery = `SELECT COUNT(id) as total FROM leads ${whereClause}`;
+    const totalLeadsRow = get(countQuery, params);
     const totalLeads = totalLeadsRow ? totalLeadsRow.total : 0;
 
     res.json({
@@ -689,13 +700,14 @@ app.post('/api/vapi-webhook', async (req, res) => {
     
     // Classificar ocorrência
     const occurrence = classifyOccurrence(call);
+    const transcriptText = call?.transcript || '';
 
-    // Atualizar o lead com o status, log e ocorrência da ligação
+    // Atualizar o lead com o status, log, ocorrência e transcrição da ligação
     run(
       `UPDATE leads 
-       SET call_status = ?, call_log = ?, occurrence = ? 
+       SET call_status = ?, call_log = ?, occurrence = ?, transcript = ? 
        WHERE id = ?`,
-      [callStatus, logText, occurrence, leadId]
+      [callStatus, logText, occurrence, transcriptText, leadId]
     );
 
     // Regra de Negócio Precisa: Só envia SMS/E-mail se o cliente atendeu E formalizou/confirmou expressamente (CPC / Promessa)
