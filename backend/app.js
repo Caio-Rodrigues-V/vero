@@ -661,6 +661,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
       'customer-ended-call', 
       'assistant-ended-call', 
       'customer-hung-up', 
+      'customer',
       'assistant-hung-up',
       'silence-timed-out',
       'silence',
@@ -669,12 +670,19 @@ app.post('/api/vapi-webhook', async (req, res) => {
       'call-ended-by-assistant'
     ];
     
+    const lowerReason = String(endedReason || '').toLowerCase();
+    const isSuccessReason = successReasons.includes(endedReason) || 
+      lowerReason.includes('customer') || 
+      lowerReason.includes('silence') || 
+      lowerReason.includes('completed') || 
+      lowerReason.includes('assistant');
+
     const hasTranscript = Boolean(call?.transcript && call.transcript.trim().length > 0);
     const hasStarted = Boolean(call?.startedAt);
     const hasDuration = Number(call?.duration || 0) > 0;
     const hasMessages = Array.isArray(call?.messages) && call.messages.length > 0;
 
-    const isSuccess = successReasons.includes(endedReason) || hasTranscript || hasStarted || hasDuration || hasMessages;
+    const isSuccess = isSuccessReason || hasTranscript || hasStarted || hasDuration || hasMessages;
     const callStatus = isSuccess ? 'completed' : 'failed';
     
     const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${call?.duration || 0}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
