@@ -698,19 +698,17 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [callStatus, logText, occurrence, leadId]
     );
 
-    // Regra de Negócio: Só envia SMS/E-mail se o cliente atendeu E confirmou que é a pessoa certa (CPC)
-    // NÃO envia se for desconhecido, falecido, engano ou abandono antes da confirmação
-    const isNonCpc = [
-      'CLIENTE DESCONHECIDO',
-      'FALECIDO',
-      'TENTATIVA - ABANDONO',
-      'TENTATIVA - NÃO ATENDE',
-      'TENTATIVA - OCUPADO',
-      'TENTATIVA - MAQUINA MENSAGEM AUTOMATICA',
-      'TENTATIVA - ERRO DISCAGEM'
-    ].includes(occurrence);
+    // Regra de Negócio Precisa: Só envia SMS/E-mail se o cliente atendeu E formalizou/confirmou expressamente (CPC / Promessa)
+    // Se o lead atendeu mas desligou rápido, caiu ou deu atendimento não tabulado, NÃO dispara SMS nem E-mail
+    const validCpcOccurrences = [
+      'PROMESSA BOLETO',
+      'PROMESSA PIX',
+      'PROMESSA CARTÃO',
+      'ALEGA PAGAMENTO - SEM COMPROVANTE',
+      'ROBO SOLICITA ATENDIMENTO HUMANO'
+    ];
 
-    const isCpcConfirmed = callStatus === 'completed' && !isNonCpc;
+    const isCpcConfirmed = callStatus === 'completed' && validCpcOccurrences.includes(occurrence);
 
     if (isCpcConfirmed) {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
@@ -744,9 +742,9 @@ app.post('/api/vapi-webhook', async (req, res) => {
         );
       }
     } else {
-      // Se não confirmou que é o titular (desconhecido, terceiro, falecido, não atendeu), cancela envio
-      const cancelReason = isNonCpc 
-        ? `Cancelado: Não confirmou titularidade (${occurrence}).` 
+      // Se a ligação caiu, desligou ou não formalizou a confirmação, marca SMS e E-mail como Não Enviados
+      const cancelReason = callStatus === 'completed' 
+        ? `Não enviado: Chamada encerrada/desligada antes da confirmação (${occurrence}).` 
         : 'Cancelado: Ligação não atendida.';
 
       run(
