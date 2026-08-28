@@ -126,16 +126,19 @@ async function makeVapiCall(lead) {
   const assistantId = process.env.VAPI_ASSISTANT_ID;
   let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID || '992eb80b-c46a-4d61-9087-37ec21c22333'; // New Voice NV (Linha com Discagem Nacional Liberada)
 
-  // Buscar o assistente selecionado nesta campanha no banco
+  // Buscar o assistente e a linha/tronco telefônico selecionados nesta campanha no banco
   let campaignAssistantId = null;
+  let campaignPhoneNumberId = null;
   try {
-    const campaign = get('SELECT vapi_assistant_id FROM campaigns WHERE id = ?', [lead.campaign_id]);
+    const campaign = get('SELECT vapi_assistant_id, vapi_phone_number_id FROM campaigns WHERE id = ?', [lead.campaign_id]);
     campaignAssistantId = campaign?.vapi_assistant_id;
+    campaignPhoneNumberId = campaign?.vapi_phone_number_id;
   } catch (err) {
-    console.error('[VAPI] Erro ao buscar vapi_assistant_id da campanha no banco:', err.message);
+    console.error('[VAPI] Erro ao buscar dados da campanha no banco:', err.message);
   }
 
   const finalAssistantId = campaignAssistantId || assistantId;
+  const finalPhoneNumberId = campaignPhoneNumberId || phoneNumberId;
 
   // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
   const targetPhone = process.env.TEST_PHONE || lead.phone;
@@ -187,7 +190,7 @@ async function makeVapiCall(lead) {
     .replace(/\{\{nome_cliente\}\}/g, lead.name);
 
   // Se faltar chave da API, ID do assistente ou linha SIP
-  if (!apiKey || !finalAssistantId || !phoneNumberId) {
+  if (!apiKey || !finalAssistantId || !finalPhoneNumberId) {
     const isMockAllowed = process.env.MOCK_CALLS === 'true' || process.env.NODE_ENV === 'development';
     if (isMockAllowed) {
       console.log(`[VAPI MOCK] Ligando para ${phoneE164} usando Assistente: ${finalAssistantId || 'Inline-Vero'}`);
@@ -200,7 +203,7 @@ async function makeVapiCall(lead) {
       const missingKeys = [];
       if (!apiKey) missingKeys.push('VAPI_API_KEY');
       if (!finalAssistantId) missingKeys.push('VAPI_ASSISTANT_ID/vapi_assistant_id');
-      if (!phoneNumberId) missingKeys.push('VAPI_PHONE_NUMBER_ID');
+      if (!finalPhoneNumberId) missingKeys.push('VAPI_PHONE_NUMBER_ID/vapi_phone_number_id');
       const errLog = `[VAPI ERRO PROD] Falha de configuração: Variáveis faltando (${missingKeys.join(', ')})`;
       console.error(errLog);
       return {
@@ -222,7 +225,7 @@ async function makeVapiCall(lead) {
   // Montar o corpo da requisição incluindo serverUrl para garantia do Webhook VAPI
   const body = {
     assistantId: finalAssistantId,
-    phoneNumberId: phoneNumberId,
+    phoneNumberId: finalPhoneNumberId,
     serverUrl: webhookUrl,
     customer: {
       number: phoneE164,

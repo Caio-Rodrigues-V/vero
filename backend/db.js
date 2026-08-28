@@ -39,6 +39,12 @@ function initDb() {
   }
 
   try {
+    db.exec('ALTER TABLE campaigns ADD COLUMN vapi_phone_number_id TEXT;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
+  try {
     db.exec('ALTER TABLE campaigns ADD COLUMN concurrency_limit INTEGER DEFAULT 2;');
   } catch (e) {
     // Ignorar se a coluna já existir

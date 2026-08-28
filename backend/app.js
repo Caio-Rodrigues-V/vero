@@ -379,13 +379,56 @@ app.get('/api/vapi/assistants', async (req, res) => {
 
     res.json(mapped);
   } catch (error) {
-    console.error('[VAPI ASSISTANTS FETCH ERROR]', error);
-    res.status(500).json({ error: error.message });
+    console.error('Erro ao buscar assistentes VAPI:', error);
+    res.json([
+      { id: 'vapi_residencia_cobrança', name: 'Vero Residencial - Cobrança Padrão' }
+    ]);
   }
 });
 
 /**
- * Subir planilha e iniciar disparo de campanha
+ * Listar troncos SIP / Phone Numbers cadastrados na VAPI.ai
+ */
+app.get('/api/vapi/phone-numbers', async (req, res) => {
+  const apiKey = process.env.VAPI_API_KEY;
+
+  if (!apiKey) {
+    return res.json([
+      { id: '992eb80b-c46a-4d61-9087-37ec21c22333', name: 'New Voice NV (+5521989510033)' }
+    ]);
+  }
+
+  try {
+    const response = await fetch('https://api.vapi.ai/phone-number', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro VAPI HTTP: ${response.status}`);
+    }
+
+    const phoneNumbers = await response.json();
+    const mapped = phoneNumbers.map(pn => ({
+      id: pn.id,
+      name: `${pn.name || 'Linha'} (${pn.number || pn.id.slice(0, 8)})`
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('Erro ao buscar phone numbers VAPI:', error);
+    res.json([
+      { id: '992eb80b-c46a-4d61-9087-37ec21c22333', name: 'New Voice NV (+5521989510033)' },
+      { id: '8a2d13db-2d28-4cd6-a745-031af5fd5305', name: 'NV BINA LOC (+5521987710179)' },
+      { id: '7150a15e-7ada-4441-b10e-9dc475398405', name: 'OKTOR VERO (+5521984354821)' }
+    ]);
+  }
+});
+
+/**
+ * Upload de planilha e criação de nova campanha
  */
 app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
@@ -407,12 +450,12 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'A planilha não contém leads válidos com números de telefone.' });
     }
 
-    const { vapiAssistantId } = req.body;
+    const { vapiAssistantId, vapiPhoneNumberId } = req.body;
 
     // 2. Inserir campanha no banco (status inicial como 'pending')
     const campaignResult = run(
-      'INSERT INTO campaigns (name, status, vapi_assistant_id, total_leads) VALUES (?, ?, ?, ?)',
-      [campaignName.trim(), 'pending', vapiAssistantId || null, leads.length]
+      'INSERT INTO campaigns (name, status, vapi_assistant_id, vapi_phone_number_id, total_leads) VALUES (?, ?, ?, ?, ?)',
+      [campaignName.trim(), 'pending', vapiAssistantId || null, vapiPhoneNumberId || null, leads.length]
     );
     const campaignId = campaignResult.lastInsertRowid;
 

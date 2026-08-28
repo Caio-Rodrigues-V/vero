@@ -101,6 +101,10 @@ export default function App() {
   // Ocorrências / Tabulações DDM
   const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
   const [exportOccurrenceFilter, setExportOccurrenceFilter] = useState<string>('all');
+  
+  // Phone Numbers / Troncos SIP VAPI
+  const [vapiPhoneNumbers, setVapiPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
+  const [selectedVapiPhoneNumberId, setSelectedVapiPhoneNumberId] = useState<string>('');
 
   // Simulation state
   const [simulating, setSimulating] = useState(false);
@@ -112,6 +116,7 @@ export default function App() {
     fetchStats();
     fetchCampaigns();
     fetchVapiAssistants();
+    fetchVapiPhoneNumbers();
     fetchOccurrences('all');
     fetchSystemInfo();
   }, []);
@@ -125,6 +130,21 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching system info:', err);
+    }
+  };
+
+  const fetchVapiPhoneNumbers = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/vapi/phone-numbers`);
+      if (res.ok) {
+        const data = await res.json();
+        setVapiPhoneNumbers(data);
+        if (data.length > 0 && !selectedVapiPhoneNumberId) {
+          setSelectedVapiPhoneNumberId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching VAPI Phone Numbers:', err);
     }
   };
 
@@ -244,6 +264,7 @@ export default function App() {
     formData.append('file', file);
     formData.append('campaignName', campaignName);
     formData.append('vapiAssistantId', selectedVapiAssistantId);
+    formData.append('vapiPhoneNumberId', selectedVapiPhoneNumberId);
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/upload`, {
@@ -817,6 +838,23 @@ export default function App() {
                       {vapiAssistants.map(ast => (
                         <option key={ast.id} value={ast.id}>
                           {ast.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      Linha / Tronco Telefônico (BINA)
+                    </label>
+                    <select 
+                      value={selectedVapiPhoneNumberId} 
+                      onChange={(e) => setSelectedVapiPhoneNumberId(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
+                    >
+                      {vapiPhoneNumbers.map(pn => (
+                        <option key={pn.id} value={pn.id}>
+                          {pn.name}
                         </option>
                       ))}
                     </select>
