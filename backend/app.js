@@ -297,9 +297,10 @@ app.post('/api/admin/recalculate-stats', (req, res) => {
   try {
     const c = get('SELECT id FROM campaigns ORDER BY id DESC LIMIT 1');
     if (c) {
+      // Reseta todos os leads que NÃO possuem um envio real gravado com Transaction ID da Smart RCS
       run(
-        'UPDATE leads SET sms_status = ?, sms_log = ? WHERE campaign_id = ? AND (occurrence IS NULL OR occurrence NOT IN (?, ?, ?))', 
-        ['failed', 'Não enviado: Chamada encerrada antes da confirmação.', c.id, 'PROMESSA BOLETO', 'PROMESSA PIX', 'PROMESSA CARTÃO']
+        "UPDATE leads SET sms_status = 'failed', sms_log = 'Não enviado: Chamada encerrada antes da confirmação.' WHERE campaign_id = ? AND (sms_log IS NULL OR (sms_log NOT LIKE '%Transaction ID%' AND sms_log NOT LIKE '%Enviado com sucesso%'))", 
+        [c.id]
       );
       updateCampaignStats(c.id);
     }
@@ -490,7 +491,7 @@ function updateCampaignStats(campaignId) {
         COUNT(id) as total,
         SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) as successful_calls,
         SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
-        SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms,
+        SUM(CASE WHEN sms_status = 'completed' AND (sms_log LIKE '%Transaction ID%' OR sms_log LIKE '%Enviado com sucesso%') THEN 1 ELSE 0 END) as successful_sms,
         SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
         SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') AND email_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
       FROM leads
