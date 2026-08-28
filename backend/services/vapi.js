@@ -124,10 +124,7 @@ function daysToWords(days) {
 async function makeVapiCall(lead) {
   const apiKey = process.env.VAPI_API_KEY;
   const assistantId = process.env.VAPI_ASSISTANT_ID;
-  let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID;
-  if (!phoneNumberId || phoneNumberId === 'fe374635-9286-4b01-a708-0137e22f1d0d') {
-    phoneNumberId = 'd367412a-d150-4a58-b99d-3c2b5f47a781';
-  }
+  let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID || '41a9753f-62f4-435b-b65a-96ba5db35ea6'; // NEW VOICE BINA LOCALIDADE (+5521987710179)
 
   // Buscar o assistente selecionado nesta campanha no banco
   let campaignAssistantId = null;
