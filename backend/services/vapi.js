@@ -239,6 +239,7 @@ async function makeVapiCall(lead) {
   if (finalAssistantId) {
     body.assistantId = finalAssistantId;
     body.assistantOverrides = {
+      serverUrl: webhookUrl,
       recordingEnabled: true,
       variableValues: {
         nome_cliente: lead.name,
