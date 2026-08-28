@@ -202,8 +202,10 @@ async function makeVapiCall(lead) {
   const baseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
   const webhookUrl = `${baseUrl}/api/vapi-webhook`;
 
-  // Montar o corpo da requisição para a VAPI
-  let body = {
+  // Montar o corpo da requisição exatamente igual ao padrao vapi-caio
+  const body = {
+    assistantId: finalAssistantId,
+    phoneNumberId: phoneNumberId,
     customer: {
       number: phoneE164,
       name: lead.name
@@ -211,45 +213,8 @@ async function makeVapiCall(lead) {
     metadata: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
-    }
-  };
-
-  // Se o número de telefone da VAPI não estiver no .env, buscar automaticamente o ativo na conta VAPI
-  let finalPhoneNumberId = phoneNumberId;
-  if (!finalPhoneNumberId && apiKey) {
-    try {
-      const phoneRes = await fetch('https://api.vapi.ai/phone-number', {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      if (phoneRes.ok) {
-        const phoneNumbers = await phoneRes.json();
-        if (Array.isArray(phoneNumbers) && phoneNumbers.length > 0) {
-          finalPhoneNumberId = phoneNumbers[0].id;
-          console.log(`[VAPI] Número de saída autodetectado na conta VAPI: ${phoneNumbers[0].number || phoneNumbers[0].id}`);
-        }
-      }
-    } catch (e) {
-      console.warn('[VAPI] Falha ao autodetectar phoneNumberId:', e.message);
-    }
-  }
-
-  if (finalPhoneNumberId) {
-    body.phoneNumberId = finalPhoneNumberId;
-  }
-
-  // Decidir se usamos um ID existente com os prompts do nosso backend de override ou se criamos inline
-  if (finalAssistantId) {
-    body.assistantId = finalAssistantId;
-    body.assistantOverrides = {
-      voice: {
-        provider: "azure",
-        voiceId: "pt-BR-FranciscaNeural"
-      },
-      serverUrl: webhookUrl,
-      server: {
-        url: webhookUrl
-      },
-      recordingEnabled: true,
+    },
+    assistantOverrides: {
       variableValues: {
         NOME_DEV: lead.name,
         nome_cliente: lead.name,
@@ -260,28 +225,11 @@ async function makeVapiCall(lead) {
         numero_faturas: faturasText,
         tipo_telefone: tipoTelefoneText
       }
-    };
-  } else {
-    // Assistente inline - Totalmente definido no nosso backend!
-    body.assistant = {
-      name: "Verô - Vero Cobrança",
-      firstMessage: firstMessage,
-      model: {
-        provider: "openai",
-        model: "gpt-4o-mini",
-        systemPrompt: systemPrompt
-      },
-      voice: {
-        provider: "azure",
-        voiceId: "pt-BR-FranciscaNeural"
-      },
-      silenceTimeoutSeconds: 30,
-      maxDurationSeconds: 300 // Limite de 5 minutos
-    };
-  }
+    }
+  };
 
   try {
-    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${finalPhoneNumberId || 'Nenhum'}`);
+    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${phoneNumberId || 'Nenhum'}`);
 
     const response = await fetch('https://api.vapi.ai/call/phone', {
       method: 'POST',
