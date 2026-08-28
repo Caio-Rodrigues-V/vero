@@ -244,7 +244,9 @@ app.post('/api/campaigns/:id/start', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    if (campaign.status === 'pending' || campaign.status === 'failed') {
+    if (campaign.status === 'pending' || campaign.status === 'failed' || campaign.status === 'processing') {
+      // Destravar leads que ficaram como 'calling' em campanhas anteriores
+      run("UPDATE leads SET call_status = 'pending', sms_status = 'pending', email_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [id]);
       run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
       // Executa a função assíncrona de processamento em background
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
