@@ -623,19 +623,19 @@ export default function App() {
                             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
                               <div>
                                 <span className="text-slate-400 block">Ligações OK</span>
-                                <strong className="text-slate-800 text-base">{c.successful_calls}</strong>
+                                <strong className="text-emerald-600 text-base">{c.successful_calls}</strong>
                               </div>
                               <div>
-                                <span className="text-slate-400 block">Falhas Chamada</span>
-                                <strong className="text-red-500 text-base">{c.failed_calls}</strong>
+                                <span className="text-slate-400 block">Não Atendidas</span>
+                                <strong className="text-slate-500 text-base">{c.failed_calls}</strong>
                               </div>
                               <div>
                                 <span className="text-slate-400 block">RCS OK</span>
-                                <strong className="text-slate-800 text-base">{c.successful_sms}</strong>
+                                <strong className="text-emerald-600 text-base">{c.successful_sms}</strong>
                               </div>
                               <div>
-                                <span className="text-slate-400 block">Falhas RCS</span>
-                                <strong className="text-red-500 text-base">{c.failed_sms}</strong>
+                                <span className="text-slate-400 block">Não Enviados</span>
+                                <strong className="text-slate-500 text-base">{c.failed_sms}</strong>
                               </div>
                             </div>
 
@@ -1026,14 +1026,14 @@ export default function App() {
                             } ${
                               l.call_status === 'calling' && 'bg-sky-50 text-sky-700 animate-pulse'
                             } ${
-                              l.call_status === 'failed' && 'bg-red-50 text-red-700'
+                              l.call_status === 'failed' && 'bg-slate-100 text-slate-600'
                             } ${
                               l.call_status === 'pending' && 'bg-slate-100 text-slate-600'
                             }`}>
                               {l.call_status === 'completed' && 'Atendida'}
                               {l.call_status === 'processing' && 'Fila n8n'}
                               {l.call_status === 'calling' && 'Discando...'}
-                              {l.call_status === 'failed' && 'Falhou'}
+                              {l.call_status === 'failed' && 'Não Atendida'}
                               {l.call_status === 'pending' && 'Aguardando'}
                             </span>
                           </td>
@@ -1050,14 +1050,14 @@ export default function App() {
                             } ${
                               l.sms_status === 'sending' && 'bg-sky-50 text-sky-700 animate-pulse'
                             } ${
-                              l.sms_status === 'failed' && 'bg-red-50 text-red-700'
+                              l.sms_status === 'failed' && 'bg-slate-100 text-slate-600'
                             } ${
                               l.sms_status === 'pending' && 'bg-slate-100 text-slate-600'
                             }`}>
                               {l.sms_status === 'completed' && 'Entregue'}
                               {l.sms_status === 'processing' && 'Fila n8n'}
                               {l.sms_status === 'sending' && 'Enviando...'}
-                              {l.sms_status === 'failed' && 'Falhou'}
+                              {l.sms_status === 'failed' && 'Não Enviado'}
                               {l.sms_status === 'pending' && 'Aguardando'}
                             </span>
                           </td>
@@ -1074,14 +1074,14 @@ export default function App() {
                             } ${
                               l.email_status === 'sending' && 'bg-sky-50 text-sky-700 animate-pulse'
                             } ${
-                              l.email_status === 'failed' && 'bg-red-50 text-red-700'
+                              l.email_status === 'failed' && 'bg-slate-100 text-slate-600'
                             } ${
                               l.email_status === 'pending' && 'bg-slate-100 text-slate-600'
                             }`}>
                               {l.email_status === 'completed' && 'Enviado'}
                               {l.email_status === 'processing' && 'Fila n8n'}
                               {l.email_status === 'sending' && 'Enviando...'}
-                              {l.email_status === 'failed' && 'Falhou'}
+                              {l.email_status === 'failed' && 'Não Enviado'}
                               {l.email_status === 'pending' && 'Aguardando'}
                             </span>
                           </td>
