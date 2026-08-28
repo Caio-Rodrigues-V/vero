@@ -698,14 +698,26 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [callStatus, logText, occurrence, leadId]
     );
 
-    // Decidir envio de Smart RCS e E-mail para o bot lembrete
-    // Se a chamada foi atendida com sucesso, SEMPRE envia o SMS com a linha digitável
-    if (callStatus === 'completed') {
+    // Regra de Negócio: Só envia SMS/E-mail se o cliente atendeu E confirmou que é a pessoa certa (CPC)
+    // NÃO envia se for desconhecido, falecido, engano ou abandono antes da confirmação
+    const isNonCpc = [
+      'CLIENTE DESCONHECIDO',
+      'FALECIDO',
+      'TENTATIVA - ABANDONO',
+      'TENTATIVA - NÃO ATENDE',
+      'TENTATIVA - OCUPADO',
+      'TENTATIVA - MAQUINA MENSAGEM AUTOMATICA',
+      'TENTATIVA - ERRO DISCAGEM'
+    ].includes(occurrence);
+
+    const isCpcConfirmed = callStatus === 'completed' && !isNonCpc;
+
+    if (isCpcConfirmed) {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
       if (lead) {
         const { triggerN8NSmsWebhook, sendLocawebEmail } = require('./services/communication.js');
         
-        // 1. Disparar Smart RCS de forma síncrona
+        // 1. Disparar Smart RCS
         const smsResult = await triggerN8NSmsWebhook(lead);
         const smsStatus = smsResult.success ? 'completed' : 'failed';
         
@@ -726,12 +738,16 @@ app.post('/api/vapi-webhook', async (req, res) => {
         );
       }
     } else {
-      // Se a ligação falhou ou não atendeu, marca cancelamento
+      // Se não confirmou que é o titular (desconhecido, terceiro, falecido, não atendeu), cancela envio
+      const cancelReason = isNonCpc 
+        ? `Cancelado: Não confirmou titularidade (${occurrence}).` 
+        : 'Cancelado: Ligação não atendida.';
+
       run(
         `UPDATE leads 
-         SET sms_status = 'failed', sms_log = 'Cancelado: Ligação não atendida.', email_status = 'failed', email_log = 'Cancelado: Ligação não atendida.' 
+         SET sms_status = 'failed', sms_log = ?, email_status = 'failed', email_log = ? 
          WHERE id = ?`,
-        [leadId]
+        [cancelReason, cancelReason, leadId]
       );
     }
 
