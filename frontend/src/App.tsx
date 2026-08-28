@@ -105,13 +105,28 @@ export default function App() {
   // Simulation state
   const [simulating, setSimulating] = useState(false);
 
+  const [systemInfo, setSystemInfo] = useState<{ providerName?: string; dialerProvider?: string } | null>(null);
+
   // Fetch initial data
   useEffect(() => {
     fetchStats();
     fetchCampaigns();
     fetchVapiAssistants();
     fetchOccurrences('all');
+    fetchSystemInfo();
   }, []);
+
+  const fetchSystemInfo = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/system-info`);
+      if (res.ok) {
+        const data = await res.json();
+        setSystemInfo(data);
+      }
+    } catch (err) {
+      console.error('Error fetching system info:', err);
+    }
+  };
 
   const fetchOccurrences = async (campaignId: number | 'all' = 'all') => {
     try {
@@ -498,7 +513,9 @@ export default function App() {
                 </div>
 
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">Ligações por VAPI</span>
+                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">
+                    Ligações por {systemInfo?.providerName || 'VAPI'}
+                  </span>
                   <div className="flex items-baseline justify-between mt-2">
                     <span className="text-3xl font-extrabold text-slate-800">
                       {stats.total_successful_calls ? stats.total_successful_calls.toLocaleString() : 0}

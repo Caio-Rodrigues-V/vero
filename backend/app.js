@@ -29,15 +29,19 @@ app.use(express.json());
 
 // Endpoint de diagnóstico do sistema
 app.get('/api/system-info', (req, res) => {
+  const dialerProvider = (process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
   res.json({
     domain: 'verolembrete.grupoddm.ia.br',
     serverIp: '129.121.42.250',
+    dialerProvider: dialerProvider,
+    providerName: dialerProvider === 'retell' ? 'Retell AI' : 'VAPI.ai',
     cwd: process.cwd(),
     dirname: __dirname,
     nodeVersion: process.version,
     uptimeSeconds: process.uptime(),
     vapiAssistantId: process.env.VAPI_ASSISTANT_ID,
     vapiPhoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
+    retellAgentId: process.env.RETELL_AGENT_ID,
     appBaseUrl: process.env.APP_BASE_URL
   });
 });
