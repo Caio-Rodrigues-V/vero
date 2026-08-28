@@ -4,6 +4,15 @@ const path = require('path');
 const dbPath = path.join(__dirname, 'vero_recovery.db');
 const db = new DatabaseSync(dbPath);
 
+// Habilitar WAL mode e busy_timeout para alta concorrência de escritas paralelas
+try {
+  db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA busy_timeout = 10000;');
+  db.exec('PRAGMA synchronous = NORMAL;');
+} catch (e) {
+  console.warn('[DB PRAGMA WARN]', e.message);
+}
+
 // Inicializar as tabelas do banco de dados
 function initDb() {
   db.exec(`
@@ -53,46 +62,71 @@ function initDb() {
   `);
 
   // Executar migração para bancos de dados existentes
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN barcode TEXT;");
-  } catch (err) {}
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN dias_atraso INTEGER;");
-  } catch (err) {}
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN status_internet TEXT;");
-  } catch (err) {}
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN occurrence TEXT;");
-  } catch (err) {}
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN email TEXT;");
-  } catch (err) {}
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN email_status TEXT DEFAULT 'pending';");
-  } catch (err) {}
-  try {
-    db.exec("ALTER TABLE leads ADD COLUMN email_log TEXT;");
-  } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN barcode TEXT;"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN dias_atraso INTEGER;"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN status_internet TEXT;"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN occurrence TEXT;"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN email TEXT;"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN email_status TEXT DEFAULT 'pending';"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN email_log TEXT;"); } catch (err) {}
 }
 
-// Helper para executar queries que não retornam dados
+// Helper para executar queries com auto-retry se o banco estiver ocupado
 function run(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.run(...params);
+  let retries = 5;
+  while (retries > 0) {
+    try {
+      const stmt = db.prepare(sql);
+      return stmt.run(...params);
+    } catch (err) {
+      if (err.message && (err.message.includes('locked') || err.message.includes('busy')) && retries > 1) {
+        retries--;
+        const start = Date.now();
+        while (Date.now() - start < 50) {}
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
-// Helper para obter um único registro
+// Helper para obter um único registro com auto-retry
 function get(sql, params = []) {
-  const stmt = db.prepare(sql);
-  const result = stmt.get(...params);
-  return result === undefined ? null : result;
+  let retries = 5;
+  while (retries > 0) {
+    try {
+      const stmt = db.prepare(sql);
+      const result = stmt.get(...params);
+      return result === undefined ? null : result;
+    } catch (err) {
+      if (err.message && (err.message.includes('locked') || err.message.includes('busy')) && retries > 1) {
+        retries--;
+        const start = Date.now();
+        while (Date.now() - start < 50) {}
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
-// Helper para obter múltiplos registros
+// Helper para obter múltiplos registros com auto-retry
 function all(sql, params = []) {
-  const stmt = db.prepare(sql);
-  return stmt.all(...params);
+  let retries = 5;
+  while (retries > 0) {
+    try {
+      const stmt = db.prepare(sql);
+      return stmt.all(...params);
+    } catch (err) {
+      if (err.message && (err.message.includes('locked') || err.message.includes('busy')) && retries > 1) {
+        retries--;
+        const start = Date.now();
+        while (Date.now() - start < 50) {}
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
 module.exports = {

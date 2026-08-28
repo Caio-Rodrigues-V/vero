@@ -50,16 +50,18 @@ async function processCampaign(campaignId) {
         break;
       }
 
+      // 1. Marcar todo o lote como 'calling' em uma ÚNICA query SQL otimizada
+      const leadIds = leads.map(l => l.id);
+      const placeholders = leadIds.map(() => '?').join(',');
+      run(
+        `UPDATE leads 
+         SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Aguardando resultado da ligação...', email_log = 'Aguardando resultado da ligação...'
+         WHERE id IN (${placeholders})`,
+        leadIds
+      );
+
       // Despachar lote
       const promises = leads.map(async (lead) => {
-        // 1. Atualizar para status temporário de envio
-        run(
-          `UPDATE leads 
-           SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem VAPI...', sms_log = 'Aguardando resultado da ligação...', email_log = 'Aguardando resultado da ligação...'
-           WHERE id = ?`,
-          [lead.id]
-        );
-
         // 2. Disparar Chamada de voz via VAPI (direto pelo backend)
         const callResult = await makeVapiCall(lead);
 
