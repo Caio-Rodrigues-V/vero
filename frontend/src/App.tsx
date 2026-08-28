@@ -24,7 +24,7 @@ import {
 interface Campaign {
   id: number;
   name: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'paused';
   total_leads: number;
   processed_leads: number;
   successful_calls: number;
@@ -647,10 +647,14 @@ export default function App() {
 
                             <div className="flex gap-2">
                               <button 
-                                onClick={() => handleCancelCampaign(c.id)}
-                                className="w-full py-2 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition"
+                                onClick={() => c.status === 'processing' ? handleCancelCampaign(c.id) : handleStartCampaign(c.id)}
+                                className={`w-full py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+                                  c.status === 'processing' 
+                                    ? 'border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold' 
+                                    : 'bg-green-600 text-white hover:bg-green-700 font-bold'
+                                }`}
                               >
-                                Parar Disparos
+                                {c.status === 'processing' ? '⏸️ Pausar Disparos' : '▶️ Retomar Disparos'}
                               </button>
                             </div>
                           </div>
@@ -917,19 +921,19 @@ export default function App() {
 
                           {/* Ações */}
                           <div className="flex items-center gap-2">
-                            {(c.status === 'pending' || c.status === 'failed') && (
+                            {(c.status === 'pending' || c.status === 'failed' || c.status === 'paused') && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleStartCampaign(c.id); }}
                                 className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700 transition flex items-center gap-1"
                               >
                                 <Play size={12} />
-                                Disparar
+                                {c.status === 'paused' ? 'Retomar' : 'Disparar'}
                               </button>
                             )}
                             {c.status === 'processing' && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleCancelCampaign(c.id); }}
-                                className="px-3 py-1.5 border border-red-200 text-red-600 rounded-md text-xs font-semibold hover:bg-red-50 transition"
+                                className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-md text-xs font-semibold hover:bg-amber-100 transition"
                               >
                                 Pausar
                               </button>
