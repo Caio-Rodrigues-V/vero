@@ -734,7 +734,13 @@ app.post('/api/vapi-webhook', async (req, res) => {
           `UPDATE leads 
            SET sms_status = ?, sms_log = ?, email_status = ?, email_log = ? 
            WHERE id = ?`,
-          [smsStatus, smsResult.log, emailStatus, emailLog, leadId]
+          [
+            smsStatus, 
+            smsResult.success ? `[Smart RCS] Enviado com sucesso para o celular do titular.` : smsResult.log, 
+            emailStatus, 
+            emailLog, 
+            leadId
+          ]
         );
       }
     } else {
