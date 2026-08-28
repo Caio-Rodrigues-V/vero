@@ -1,5 +1,6 @@
 const { run, get } = require('../db.js');
 const { triggerN8NSmsWebhook } = require('./communication.js');
+const { updateCampaignStats } = require('./stats.js');
 
 /**
  * Disparar ligação de cobrança via Retell AI API
@@ -141,9 +142,10 @@ async function handleRetellWebhook(eventData) {
 
     // Recalcular estatísticas da campanha
     try {
-      const { updateCampaignStats } = require('../app');
-      if (updateCampaignStats) updateCampaignStats(lead.campaign_id);
-    } catch (e) {}
+      updateCampaignStats(lead.campaign_id);
+    } catch (e) {
+      console.error('[RETELL STATS UPDATE ERROR]', e.message);
+    }
 
     return { status: 'success', leadId: lead.id, callStatus: finalCallStatus };
   }

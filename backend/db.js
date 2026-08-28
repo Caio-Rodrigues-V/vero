@@ -13,14 +13,32 @@ try {
   console.warn('[DB PRAGMA WARN]', e.message);
 }
 
-// Inicializar as tabelas do banco de dados
+/**
+ * Função utilitária para adicionar coluna em tabela existente de forma segura
+ */
+function safeAddColumn(table, columnDefinition) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDefinition};`);
+  } catch (err) {
+    if (err.message && err.message.toLowerCase().includes('duplicate column name')) {
+      // Coluna já existe, ignorar silenciosamente
+    } else {
+      console.warn(`[DB MIGRATION WARN] ${table} -> ${columnDefinition}:`, err.message);
+    }
+  }
+}
+
+// Inicializar as tabelas do banco de dados e aplicar migrações
 function initDb() {
+  // 1. Tabela campaigns
   db.exec(`
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      status TEXT NOT NULL, -- 'processing', 'completed', 'failed'
+      status TEXT NOT NULL, -- 'pending', 'processing', 'completed', 'failed'
+      dialer_provider TEXT DEFAULT 'vapi',
       vapi_assistant_id TEXT,
+      vapi_phone_number_id TEXT,
       concurrency_limit INTEGER DEFAULT 2,
       total_leads INTEGER DEFAULT 0,
       processed_leads INTEGER DEFAULT 0,
@@ -28,52 +46,19 @@ function initDb() {
       failed_calls INTEGER DEFAULT 0,
       successful_sms INTEGER DEFAULT 0,
       failed_sms INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  try {
-    db.exec('ALTER TABLE campaigns ADD COLUMN vapi_assistant_id TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
+  // Migrações para a tabela campaigns
+  safeAddColumn('campaigns', 'vapi_assistant_id TEXT');
+  safeAddColumn('campaigns', 'vapi_phone_number_id TEXT');
+  safeAddColumn('campaigns', 'dialer_provider TEXT DEFAULT "vapi"');
+  safeAddColumn('campaigns', 'concurrency_limit INTEGER DEFAULT 2');
+  safeAddColumn('campaigns', 'updated_at DATETIME');
 
-  try {
-    db.exec('ALTER TABLE campaigns ADD COLUMN vapi_phone_number_id TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
-  try {
-    db.exec("ALTER TABLE campaigns ADD COLUMN dialer_provider TEXT DEFAULT 'vapi';");
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
-  try {
-    db.exec('ALTER TABLE campaigns ADD COLUMN concurrency_limit INTEGER DEFAULT 2;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
-  try {
-    db.exec('ALTER TABLE leads ADD COLUMN transcript TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
-  try {
-    db.exec('ALTER TABLE leads ADD COLUMN call_id TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
-  try {
-    db.exec('ALTER TABLE leads ADD COLUMN call_id TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
+  // 2. Tabela leads
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,39 +73,45 @@ function initDb() {
       occurrence TEXT, -- Tabulação / Ocorrência final
       email TEXT, -- E-mail do cliente
       call_id TEXT, -- ID da chamada na VAPI / Retell
-      call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'completed', 'failed'
+      call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'in_progress', 'completed', 'failed'
       call_attempts INTEGER DEFAULT 0,
+      call_duration INTEGER DEFAULT 0,
       call_log TEXT,
       sms_status TEXT DEFAULT 'pending', -- 'pending', 'sending', 'completed', 'failed'
       sms_log TEXT,
       email_status TEXT DEFAULT 'pending', -- 'pending', 'sending', 'completed', 'failed'
       email_log TEXT,
+      transcript TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
     );
   `);
 
-  try {
-    db.exec('ALTER TABLE leads ADD COLUMN transcript TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
+  // Migrações para a tabela leads
+  safeAddColumn('leads', 'barcode TEXT');
+  safeAddColumn('leads', 'dias_atraso INTEGER');
+  safeAddColumn('leads', 'status_internet TEXT');
+  safeAddColumn('leads', 'occurrence TEXT');
+  safeAddColumn('leads', 'email TEXT');
+  safeAddColumn('leads', 'email_status TEXT DEFAULT "pending"');
+  safeAddColumn('leads', 'email_log TEXT');
+  safeAddColumn('leads', 'call_id TEXT');
+  safeAddColumn('leads', 'call_duration INTEGER DEFAULT 0');
+  safeAddColumn('leads', 'transcript TEXT');
+  safeAddColumn('leads', 'created_at DATETIME');
+  safeAddColumn('leads', 'updated_at DATETIME');
 
+  // Garantir que registros existentes sem created_at/updated_at fiquem preenchidos com o timestamp atual
   try {
-    db.exec('ALTER TABLE leads ADD COLUMN call_id TEXT;');
-  } catch (e) {
-    // Ignorar se a coluna já existir
-  }
-
-  // Executar migração para bancos de dados existentes
-  try { db.exec("ALTER TABLE leads ADD COLUMN barcode TEXT;"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN dias_atraso INTEGER;"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN status_internet TEXT;"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN occurrence TEXT;"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN email TEXT;"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN email_status TEXT DEFAULT 'pending';"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN email_log TEXT;"); } catch (err) {}
-  try { db.exec("ALTER TABLE leads ADD COLUMN call_id TEXT;"); } catch (err) {}
+    db.exec('UPDATE leads SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL;');
+    db.exec('UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
+    db.exec('UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
+  } catch (e) {}
 }
+
+// Auto-executar initDb() no carregamento do módulo para garantir migrações imediatas
+initDb();
 
 // Helper para executar queries com auto-retry se o banco estiver ocupado
 function run(sql, params = []) {

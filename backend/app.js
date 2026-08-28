@@ -8,6 +8,7 @@ const dotenv = require('dotenv');
 const { initDb, run, get, all, db } = require('./db.js');
 const { parseSpreadsheet } = require('./utils/parser.js');
 const { triggerCampaignProcessor, startMonitorLoop } = require('./services/campaignExecutor.js');
+const { updateCampaignStats } = require('./services/stats.js');
 const xlsx = require('xlsx');
 
 dotenv.config();

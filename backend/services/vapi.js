@@ -250,7 +250,7 @@ async function makeVapiCall(lead) {
   };
 
   try {
-    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${phoneNumberId} | Webhook: ${webhookUrl}`);
+    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${finalPhoneNumberId} | Webhook: ${webhookUrl}`);
 
     const response = await fetch('https://api.vapi.ai/call', {
       method: 'POST',
