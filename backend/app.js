@@ -698,9 +698,9 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [callStatus, logText, occurrence, leadId]
     );
 
-    // Decidir se envia a mensagem de acordo/boleto via Smart RCS e E-mail
-    const isPromise = occurrence === 'PROMESSA BOLETO' || occurrence === 'PROMESSA PIX';
-    if (isPromise) {
+    // Decidir envio de Smart RCS e E-mail para o bot lembrete
+    // Se a chamada foi atendida com sucesso, SEMPRE envia o SMS com a linha digitável
+    if (callStatus === 'completed') {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
       if (lead) {
         const { triggerN8NSmsWebhook, sendLocawebEmail } = require('./services/communication.js');
@@ -726,17 +726,12 @@ app.post('/api/vapi-webhook', async (req, res) => {
         );
       }
     } else {
-      // Se não houver formalização, não dispara SMS/E-mail e atualiza status para concluir o fluxo
-      const finalSmsStatus = callStatus === 'failed' ? 'failed' : 'completed';
-      const finalSmsLog = callStatus === 'failed' ? 'Cancelado: Ligação de voz falhou.' : 'Não enviado: Ocorrência não gerou formalização.';
-      const finalEmailStatus = callStatus === 'failed' ? 'failed' : 'completed';
-      const finalEmailLog = callStatus === 'failed' ? 'Cancelado: Ligação de voz falhou.' : 'Não enviado: Ocorrência não gerou formalização.';
-      
+      // Se a ligação falhou ou não atendeu, marca cancelamento
       run(
         `UPDATE leads 
-         SET sms_status = ?, sms_log = ?, email_status = ?, email_log = ? 
+         SET sms_status = 'failed', sms_log = 'Cancelado: Ligação não atendida.', email_status = 'failed', email_log = 'Cancelado: Ligação não atendida.' 
          WHERE id = ?`,
-        [finalSmsStatus, finalSmsLog, finalEmailStatus, finalEmailLog, leadId]
+        [leadId]
       );
     }
 
