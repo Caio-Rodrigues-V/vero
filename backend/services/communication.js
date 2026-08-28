@@ -222,7 +222,103 @@ async function sendLocawebEmail(lead) {
   }
 }
 
+/**
+ * Dispara a mensagem Smart RCS usando a API da Smart RCS.
+ * 
+ * @param {object} lead - O objeto do lead
+ * @returns {Promise<{success: boolean, log: string}>}
+ */
+async function triggerSmartRcs(lead) {
+  const apiKey = process.env.SMART_RCS_API_KEY || '8DD74B20-D556-494E-A6C1-216FCA7796EC';
+  const apiUrl = process.env.SMART_RCS_API_URL || 'https://api.smartrcs.com.br/v1/messages';
+
+  // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
+  const targetPhone = process.env.TEST_PHONE || lead.phone;
+  if (process.env.TEST_PHONE) {
+    console.log(`[Smart RCS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+  }
+
+  // Limpar telefone (apenas dígitos e com prefixo DDI 55)
+  let cleanedPhone = String(targetPhone).replace(/\D/g, '');
+  if (!cleanedPhone.startsWith('55') && cleanedPhone.length >= 10) {
+    cleanedPhone = '55' + cleanedPhone;
+  }
+
+  if (!lead.barcode) {
+    console.log(`[Smart RCS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
+    return {
+      success: false,
+      log: 'Cancelado: Lead não possui linha digitável.'
+    };
+  }
+
+  const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
+  const messageText = `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}`;
+
+  // Se a API exigir ignorar SSL auto-assinado em ambiente específico
+  if (apiUrl.includes('smartrcs.com.br')) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  }
+
+  try {
+    console.log(`[Smart RCS] Enviando mensagem para ${cleanedPhone}...`);
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({
+        number: cleanedPhone,
+        phone: cleanedPhone,
+        recipient: cleanedPhone,
+        message: messageText,
+        text: messageText,
+        external_id: String(lead.id)
+      })
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`Erro API Smart RCS: ${response.status} - ${responseText}`);
+    }
+
+    let rcsId = 'OK';
+    try {
+      const data = JSON.parse(responseText);
+      rcsId = data.id || data.message_id || data.uuid || 'OK';
+    } catch(e) {}
+
+    console.log(`[Smart RCS] Mensagem enviada com sucesso para ${cleanedPhone}. ID: ${rcsId}`);
+    return {
+      success: true,
+      log: `[Smart RCS] Enviado com sucesso. ID: ${rcsId}`
+    };
+  } catch (error) {
+    console.error(`[Smart RCS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
+    return {
+      success: false,
+      log: `[Smart RCS] Falha no envio: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Roteador de mensagens SMS/RCS: Prioriza Smart RCS se SMART_RCS_API_KEY estiver no .env, mantendo Unipix intacto.
+ */
+async function dispatchSmsOrRcs(lead) {
+  if (process.env.SMART_RCS_API_KEY) {
+    return await triggerSmartRcs(lead);
+  }
+  return await triggerUnipixSms(lead);
+}
+
 module.exports = { 
-  triggerN8NSmsWebhook: triggerUnipixSms,
+  triggerN8NSmsWebhook: dispatchSmsOrRcs,
+  triggerUnipixSms,
+  triggerSmartRcs,
   sendLocawebEmail
 };
