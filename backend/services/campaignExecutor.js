@@ -39,7 +39,7 @@ async function processCampaign(campaignId) {
 
       // 3. Buscar o próximo lead pendente na fila
       const lead = get(
-        "SELECT * FROM leads WHERE campaign_id = ? AND call_status = 'pending' AND sms_status = 'pending' ORDER BY id ASC LIMIT 1",
+        "SELECT * FROM leads WHERE campaign_id = ? AND call_status = 'pending' ORDER BY id ASC LIMIT 1",
         [campaignId]
       );
 

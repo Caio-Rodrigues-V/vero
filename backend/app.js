@@ -297,9 +297,14 @@ app.post('/api/admin/recalculate-stats', (req, res) => {
   try {
     const c = get('SELECT id FROM campaigns ORDER BY id DESC LIMIT 1');
     if (c) {
-      // Força o reset de qualquer SMS de teste anterior que não possua Transaction ID real da Smart RCS
+      // Garante que leads pendentes tenham sms_status = 'pending'
       run(
-        "UPDATE leads SET sms_status = 'failed', sms_log = 'Não enviado: Chamada encerrada antes da confirmação.' WHERE campaign_id = ? AND (sms_log IS NULL OR sms_log NOT LIKE '%Transaction ID%')", 
+        "UPDATE leads SET sms_status = 'pending', sms_log = NULL WHERE campaign_id = ? AND call_status = 'pending'", 
+        [c.id]
+      );
+      // Força o reset de qualquer SMS de teste anterior de chamadas encerradas sem Transaction ID
+      run(
+        "UPDATE leads SET sms_status = 'failed', sms_log = 'Não enviado: Chamada encerrada antes da confirmação.' WHERE campaign_id = ? AND call_status IN ('completed', 'failed') AND (sms_log IS NULL OR sms_log NOT LIKE '%Transaction ID%')", 
         [c.id]
       );
       updateCampaignStats(c.id);
