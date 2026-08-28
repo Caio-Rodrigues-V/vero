@@ -111,14 +111,15 @@ async function sendLocawebEmail(lead) {
   const fromEmail = process.env.LOCAWEB_FROM || 'verointernet@grupoddm.com.br';
   const apiUrl = 'https://api.smtplw.com.br/v1/messages';
 
-  if (!lead.email || !lead.email.includes('@')) {
+  // Se houver TEST_EMAIL no .env, redireciona o e-mail para o teste
+  const targetEmail = process.env.TEST_EMAIL || lead.email;
+
+  if (!targetEmail || !targetEmail.includes('@')) {
     return { success: false, log: 'Cancelado: Lead sem e-mail cadastrado.' };
   }
 
-  // Se houver TEST_EMAIL no .env, redireciona o e-mail para o teste
-  const targetEmail = process.env.TEST_EMAIL || lead.email;
   if (process.env.TEST_EMAIL) {
-    console.log(`[Locaweb Email - MODO TESTE] Redirecionando e-mail do Lead #${lead.id} (${lead.email}) para o e-mail de teste: ${targetEmail}`);
+    console.log(`[Locaweb Email - MODO TESTE] Redirecionando e-mail do Lead #${lead.id} (${lead.email || 'sem e-mail'}) para o e-mail de teste: ${targetEmail}`);
   }
 
   // Se não houver código de barras, gera aviso

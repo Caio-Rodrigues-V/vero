@@ -652,10 +652,10 @@ app.post('/api/vapi-webhook', async (req, res) => {
         const smsResult = await triggerN8NSmsWebhook(lead);
         const smsStatus = smsResult.success ? 'completed' : 'failed';
         
-        // 2. Disparar E-mail se houver e-mail cadastrado
+        // 2. Disparar E-mail se houver e-mail cadastrado ou se houver e-mail de teste (.env)
         let emailStatus = 'completed';
         let emailLog = 'Não enviado: Lead sem e-mail cadastrado.';
-        if (lead.email && lead.email.includes('@')) {
+        if ((lead.email && lead.email.includes('@')) || process.env.TEST_EMAIL) {
           const emailResult = await sendLocawebEmail(lead);
           emailStatus = emailResult.success ? 'completed' : 'failed';
           emailLog = emailResult.log;
