@@ -208,10 +208,6 @@ async function makeVapiCall(lead) {
     metadata: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
-    },
-    serverUrl: webhookUrl,
-    server: {
-      url: webhookUrl
     }
   };
 
