@@ -66,31 +66,16 @@ async function makeRetellCall(lead) {
         [data.call_id, lead.id]
       );
 
-      return { success: true, callId: data.call_id };
+      return { success: true, callId: data.call_id, log: `Chamada Retell iniciada com sucesso. ID: ${data.call_id}` };
     } else {
-      console.error(`[RETELL] Erro no retorno da API Retell:`, data);
-      run(
-        `UPDATE leads SET 
-          call_status = 'failed', 
-          occurrence = ?, 
-          updated_at = CURRENT_TIMESTAMP 
-        WHERE id = ?`,
-        [data.message || 'Erro na API Retell AI', lead.id]
-      );
-      return { success: false, error: data.message || 'Falha ao registrar chamada' };
+      const errMsg = data.message || data.error || JSON.stringify(data);
+      console.error(`[RETELL] Erro no retorno da API Retell:`, errMsg);
+      return { success: false, log: `Erro Retell API: ${errMsg}` };
     }
 
   } catch (error) {
     console.error(`[RETELL] Exceção ao chamar API da Retell:`, error.message);
-    run(
-      `UPDATE leads SET 
-        call_status = 'failed', 
-        occurrence = ?, 
-        updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?`,
-      [error.message, lead.id]
-    );
-    return { success: false, error: error.message };
+    return { success: false, log: `Exceção Retell API: ${error.message}` };
   }
 }
 

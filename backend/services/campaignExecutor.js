@@ -26,8 +26,12 @@ async function processCampaign(campaignId) {
         break;
       }
 
-      // 2. Verificar limite de chamadas ativas simultâneas (concorrência)
-      const concurrencyLimit = campaign.concurrency_limit || 2;
+      const provider = (campaign.dialer_provider || process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
+
+      // 2. Verificar limite de chamadas ativas simultâneas (concorrência - Padrão 10 para Retell AI)
+      const defaultLimit = provider === 'retell' ? 10 : 2;
+      const concurrencyLimit = (campaign.concurrency_limit && campaign.concurrency_limit > 2) ? campaign.concurrency_limit : defaultLimit;
+
       const activeCallsObj = get(
         `SELECT COUNT(*) as count FROM leads WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress')`,
         [campaignId]
@@ -35,8 +39,8 @@ async function processCampaign(campaignId) {
       const activeCalls = activeCallsObj ? activeCallsObj.count : 0;
 
       if (activeCalls >= concurrencyLimit) {
-        // Aguarda 1 segundo antes de checar novamente a fila de concorrência
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Aguarda 500ms antes de checar novamente a fila de concorrência
+        await new Promise(resolve => setTimeout(resolve, 500));
         continue;
       }
 
@@ -57,8 +61,6 @@ async function processCampaign(campaignId) {
         }
         break;
       }
-
-      const provider = (campaign.dialer_provider || process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
 
       // 4. Marcar o lead como 'calling' no banco temporariamente
       run(
@@ -83,17 +85,17 @@ async function processCampaign(campaignId) {
             callResult.log.toLowerCase().includes('concurrency') ||
             callResult.log.toLowerCase().includes('rate limit') ||
             callResult.log.toLowerCase().includes('too many') ||
+            callResult.log.toLowerCase().includes('quota') ||
             callResult.log.includes('429')
           );
 
           if (isConcurrencyError) {
-            // Tronco ou VAPI com canais cheios: Devolve o lead para pending e aguarda 5 segundos
-            console.log(`[EXECUTOR CONCORRÊNCIA] Limite da VAPI atingido. Devolvendo lead #${lead.id} para fila e pausando 5s para liberar canal...`);
+            console.log(`[EXECUTOR CONCORRÊNCIA] Limite de concorrência/rate limit (${provider.toUpperCase()}) atingido. Devolvendo lead #${lead.id} para a fila e aguardando 3s...`);
             run(
-              `UPDATE leads SET call_status = 'pending', call_log = 'Aguardando liberação de canais VAPI...' WHERE id = ?`,
+              `UPDATE leads SET call_status = 'pending', call_log = 'Aguardando liberação de vaga no canal...' WHERE id = ?`,
               [lead.id]
             );
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            await new Promise((resolve) => setTimeout(resolve, 3000));
             continue;
           }
 
