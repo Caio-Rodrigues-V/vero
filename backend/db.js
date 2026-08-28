@@ -21,6 +21,7 @@ function initDb() {
       name TEXT NOT NULL,
       status TEXT NOT NULL, -- 'processing', 'completed', 'failed'
       vapi_assistant_id TEXT,
+      concurrency_limit INTEGER DEFAULT 2,
       total_leads INTEGER DEFAULT 0,
       processed_leads INTEGER DEFAULT 0,
       successful_calls INTEGER DEFAULT 0,
@@ -38,7 +39,19 @@ function initDb() {
   }
 
   try {
+    db.exec('ALTER TABLE campaigns ADD COLUMN concurrency_limit INTEGER DEFAULT 2;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
+  try {
     db.exec('ALTER TABLE leads ADD COLUMN transcript TEXT;');
+  } catch (e) {
+    // Ignorar se a coluna já existir
+  }
+
+  try {
+    db.exec('ALTER TABLE leads ADD COLUMN call_id TEXT;');
   } catch (e) {
     // Ignorar se a coluna já existir
   }
@@ -56,6 +69,7 @@ function initDb() {
       status_internet TEXT, -- Status da internet / contrato
       occurrence TEXT, -- Tabulação / Ocorrência final
       email TEXT, -- E-mail do cliente
+      call_id TEXT, -- ID da chamada na VAPI / Retell
       call_status TEXT DEFAULT 'pending', -- 'pending', 'calling', 'completed', 'failed'
       call_attempts INTEGER DEFAULT 0,
       call_log TEXT,
@@ -75,6 +89,7 @@ function initDb() {
   try { db.exec("ALTER TABLE leads ADD COLUMN email TEXT;"); } catch (err) {}
   try { db.exec("ALTER TABLE leads ADD COLUMN email_status TEXT DEFAULT 'pending';"); } catch (err) {}
   try { db.exec("ALTER TABLE leads ADD COLUMN email_log TEXT;"); } catch (err) {}
+  try { db.exec("ALTER TABLE leads ADD COLUMN call_id TEXT;"); } catch (err) {}
 }
 
 // Helper para executar queries com auto-retry se o banco estiver ocupado

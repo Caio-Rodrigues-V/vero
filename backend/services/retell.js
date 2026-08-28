@@ -1,5 +1,5 @@
-const { query, run, get } = require('../database');
-const { sendSmartRcs } = require('./smartRcs');
+const { run, get } = require('../db.js');
+const { triggerN8NSmsWebhook } = require('./communication.js');
 
 /**
  * Disparar ligação de cobrança via Retell AI API
@@ -147,7 +147,7 @@ async function handleRetellWebhook(eventData) {
     // Se a chamada foi concluída e com diálogo ativo, verificar e enviar Smart RCS se necessário
     if (finalCallStatus === 'completed' && transcript.length > 20) {
       console.log(`[RETELL WEBHOOK] Processando envio de Smart RCS para Lead #${lead.id}...`);
-      await sendSmartRcs(lead, transcript);
+      await triggerN8NSmsWebhook(lead).catch(err => console.error('[RETELL SMS ERROR]', err.message));
     }
 
     // Recalcular estatísticas da campanha

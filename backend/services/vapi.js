@@ -186,14 +186,28 @@ async function makeVapiCall(lead) {
   const firstMessage = FIRST_MESSAGE_TEMPLATE
     .replace(/\{\{nome_cliente\}\}/g, lead.name);
 
-  // Se não houver chave de API VAPI configurada, roda no modo Mock/Simulado
-  if (!apiKey) {
-    console.log(`[VAPI MOCK] Ligando para ${phoneE164} usando Assistente: ${finalAssistantId || 'Inline-Vero'}`);
-    console.log(`[VAPI MOCK] Prompt Inicial: "${firstMessage}"`);
-    return {
-      success: true,
-      log: `[SIMULATED VAPI] Ligação efetuada em modo de teste para assistente ${finalAssistantId || 'Verô'}.`
-    };
+  // Se faltar chave da API, ID do assistente ou linha SIP
+  if (!apiKey || !finalAssistantId || !phoneNumberId) {
+    const isMockAllowed = process.env.MOCK_CALLS === 'true' || process.env.NODE_ENV === 'development';
+    if (isMockAllowed) {
+      console.log(`[VAPI MOCK] Ligando para ${phoneE164} usando Assistente: ${finalAssistantId || 'Inline-Vero'}`);
+      console.log(`[VAPI MOCK] Prompt Inicial: "${firstMessage}"`);
+      return {
+        success: true,
+        log: `[SIMULATED VAPI] Ligação efetuada em modo de teste local para assistente ${finalAssistantId || 'Verô'}.`
+      };
+    } else {
+      const missingKeys = [];
+      if (!apiKey) missingKeys.push('VAPI_API_KEY');
+      if (!finalAssistantId) missingKeys.push('VAPI_ASSISTANT_ID/vapi_assistant_id');
+      if (!phoneNumberId) missingKeys.push('VAPI_PHONE_NUMBER_ID');
+      const errLog = `[VAPI ERRO PROD] Falha de configuração: Variáveis faltando (${missingKeys.join(', ')})`;
+      console.error(errLog);
+      return {
+        success: false,
+        log: errLog
+      };
+    }
   }
 
   const baseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
@@ -205,10 +219,11 @@ async function makeVapiCall(lead) {
     .replace(/TESTE PROD/gi, '')
     .trim() || lead.name;
 
-  // Montar o corpo da requisição exatamente igual ao padrao vapi-caio
+  // Montar o corpo da requisição incluindo serverUrl para garantia do Webhook VAPI
   const body = {
     assistantId: finalAssistantId,
     phoneNumberId: phoneNumberId,
+    serverUrl: webhookUrl,
     customer: {
       number: phoneE164,
       name: cleanName
@@ -232,9 +247,9 @@ async function makeVapiCall(lead) {
   };
 
   try {
-    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${phoneNumberId || 'Nenhum'}`);
+    console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${phoneNumberId} | Webhook: ${webhookUrl}`);
 
-    const response = await fetch('https://api.vapi.ai/call/phone', {
+    const response = await fetch('https://api.vapi.ai/call', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -245,8 +260,22 @@ async function makeVapiCall(lead) {
 
     const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.message || `Erro VAPI HTTP: ${response.status}`);
+    if (!response.ok || !data.id) {
+      const errMessage = data.message || data.error || (data.message?.message) || JSON.stringify(data);
+      const fullErrLog = `HTTP ${response.status}: ${errMessage}`;
+      console.error(`[VAPI ERROR] Resposta de erro da VAPI para Lead #${lead.id}: ${fullErrLog}`);
+      return {
+        success: false,
+        log: `Erro VAPI API (${fullErrLog})`
+      };
+    }
+
+    // Salvar o call_id da VAPI diretamente no lead para auditoria e callbacks
+    try {
+      const { run: runDb } = require('../db.js');
+      runDb('UPDATE leads SET call_id = ? WHERE id = ?', [data.id, lead.id]);
+    } catch (e) {
+      console.error('[VAPI DB UPDATE WARN]', e.message);
     }
 
     return {
@@ -256,10 +285,10 @@ async function makeVapiCall(lead) {
     };
 
   } catch (error) {
-    console.error(`[VAPI ERROR] Falha ao disparar chamada para o lead #${lead.id}:`, error.message);
+    console.error(`[VAPI ERROR] Exceção ao disparar chamada para o lead #${lead.id}:`, error.message);
     return {
       success: false,
-      log: `Erro na API VAPI: ${error.message}`
+      log: `Exceção VAPI: ${error.message}`
     };
   }
 }

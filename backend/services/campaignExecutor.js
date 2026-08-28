@@ -1,7 +1,6 @@
 const { run, get, all } = require('../db.js');
 const { triggerN8NSmsWebhook } = require('./communication.js');
 const { makeVapiCall } = require('./vapi.js');
-const { makeRetellCall } = require('./retell.js');
 
 const activeJobs = new Set();
 
@@ -12,7 +11,10 @@ async function processCampaign(campaignId) {
   if (activeJobs.has(campaignId)) return;
   activeJobs.add(campaignId);
 
-  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId}`);
+  const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '1000', 10);
+  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 100 ? 1000 : paceDelayMs;
+
+  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Delay entre chamadas: ${safePaceDelay}ms)`);
 
   try {
     while (activeJobs.has(campaignId)) {
@@ -66,11 +68,15 @@ async function processCampaign(campaignId) {
         [lead.id]
       );
 
-      // 5. Disparar a chamada para a VAPI ou RETELL AI
+      // 5. Disparar a chamada para a VAPI ou RETELL AI (Lazy-load para proteger a VAPI)
       try {
-        const callResult = provider === 'retell' 
-          ? await makeRetellCall(lead) 
-          : await makeVapiCall(lead);
+        let callResult;
+        if (provider === 'retell') {
+          const { makeRetellCall } = require('./retell.js');
+          callResult = await makeRetellCall(lead);
+        } else {
+          callResult = await makeVapiCall(lead);
+        }
 
         if (!callResult.success) {
           const isConcurrencyError = callResult.log && (
@@ -122,7 +128,7 @@ async function processCampaign(campaignId) {
       }
 
       // 6. Intervalo entre cada chamada para manter fluxo constante e estável
-      await new Promise((resolve) => setTimeout(resolve, paceDelayMs));
+      await new Promise((resolve) => setTimeout(resolve, safePaceDelay));
     }
   } catch (error) {
     console.error(`[EXECUTOR] Erro ao processar campanha #${campaignId}:`, error);
