@@ -614,7 +614,9 @@ app.post('/api/vapi-webhook', async (req, res) => {
       return res.json({ received: true, status: 'missing_lead_id_in_metadata' });
     }
 
-    console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${call.endedReason}`);
+    const endedReason = call?.endedReason || call?.ended_reason || 'erro_sintetizacao_voz';
+
+    console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${endedReason}`);
 
     // Determinar se a chamada foi atendida / bem-sucedida
     const successReasons = [
@@ -625,10 +627,10 @@ app.post('/api/vapi-webhook', async (req, res) => {
       'assistant-hung-up'
     ];
     
-    const isSuccess = successReasons.includes(call.endedReason) || (call.duration > 5);
+    const isSuccess = successReasons.includes(endedReason) || (call?.duration > 5);
     const callStatus = isSuccess ? 'completed' : 'failed';
     
-    const logText = `[VAPI] Chamada encerrada. Motivo: ${call.endedReason}. Duração: ${call.duration || 0}s. Resumo: ${call.summary || 'Sem resumo fornecido.'}`;
+    const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${call?.duration || 0}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
     
     // Classificar ocorrência
     const occurrence = classifyOccurrence(call);

@@ -227,10 +227,6 @@ async function makeVapiCall(lead) {
         model: "gpt-4o-mini",
         systemPrompt: systemPrompt
       },
-      voice: {
-        provider: "playht",
-        voiceId: "susan"
-      },
       variableValues: {
         nome_cliente: lead.name,
         valor_fatura: valorFaturaText,
@@ -251,8 +247,8 @@ async function makeVapiCall(lead) {
         systemPrompt: systemPrompt
       },
       voice: {
-        provider: "playht",
-        voiceId: "susan" // Voz feminina em pt-BR recomendada
+        provider: "azure",
+        voiceId: "pt-BR-FranciscaNeural"
       },
       silenceTimeoutSeconds: 30,
       maxDurationSeconds: 300 // Limite de 5 minutos
