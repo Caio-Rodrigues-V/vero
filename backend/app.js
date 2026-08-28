@@ -601,8 +601,13 @@ app.post('/api/vapi-webhook', async (req, res) => {
   try {
     const { message } = req.body;
 
+    // Se a VAPI consultar o Server URL pedindo o assistente, retorna 200 OK para usar o assistente da chamada
+    if (message?.type === 'assistant-request') {
+      return res.status(200).json({});
+    }
+
     if (!message || message.type !== 'end-of-call-report') {
-      return res.json({ received: true, status: 'ignored_type' });
+      return res.status(200).json({});
     }
 
     const call = message.call;
