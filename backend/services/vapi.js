@@ -124,7 +124,7 @@ function daysToWords(days) {
 async function makeVapiCall(lead) {
   const apiKey = process.env.VAPI_API_KEY;
   const assistantId = process.env.VAPI_ASSISTANT_ID;
-  let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID || '992eb80b-c46a-4d61-9087-37ec21c22333'; // New Voice NV (+5521989510033)
+  let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID || '8a2d13db-2d28-4cd6-a745-031af5fd5305'; // NV BINA LOC - IP 190.89.250.133 (+5521987710179)
 
   // Buscar o assistente selecionado nesta campanha no banco
   let campaignAssistantId = null;
