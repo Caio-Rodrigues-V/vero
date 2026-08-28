@@ -230,7 +230,8 @@ async function sendLocawebEmail(lead) {
  */
 async function triggerSmartRcs(lead) {
   const apiKey = process.env.SMART_RCS_API_KEY || '8DD74B20-D556-494E-A6C1-216FCA7796EC';
-  const apiUrl = process.env.SMART_RCS_API_URL || 'https://api.smartrcs.com.br/v1/messages';
+  const apiUrl = process.env.SMART_RCS_API_URL || 'https://developer.smartrcs.com.br/api/Message/text';
+  const senderAgent = process.env.SMART_RCS_SENDER || 'rcs_grupoddm';
 
   // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
   const targetPhone = process.env.TEST_PHONE || lead.phone;
@@ -255,28 +256,27 @@ async function triggerSmartRcs(lead) {
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
   const messageText = `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}`;
 
-  // Se a API exigir ignorar SSL auto-assinado em ambiente específico
-  if (apiUrl.includes('smartrcs.com.br')) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  }
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
   try {
-    console.log(`[Smart RCS] Enviando mensagem para ${cleanedPhone}...`);
+    console.log(`[Smart RCS] Enviando mensagem via agente '${senderAgent}' para ${cleanedPhone}...`);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'x-api-key': apiKey
+        'X-Api-Key': apiKey
       },
       body: JSON.stringify({
-        number: cleanedPhone,
-        phone: cleanedPhone,
-        recipient: cleanedPhone,
-        message: messageText,
+        sender: senderAgent,
+        destinations: [
+          {
+            to: cleanedPhone,
+            messageid: `lead_${lead.id}_${Date.now()}`
+          }
+        ],
         text: messageText,
-        external_id: String(lead.id)
+        fallback: true
       })
     });
 
@@ -286,16 +286,18 @@ async function triggerSmartRcs(lead) {
       throw new Error(`Erro API Smart RCS: ${response.status} - ${responseText}`);
     }
 
-    let rcsId = 'OK';
-    try {
-      const data = JSON.parse(responseText);
-      rcsId = data.id || data.message_id || data.uuid || 'OK';
-    } catch(e) {}
+    const data = JSON.parse(responseText);
 
-    console.log(`[Smart RCS] Mensagem enviada com sucesso para ${cleanedPhone}. ID: ${rcsId}`);
+    if (data.error) {
+      throw new Error(`Smart RCS recusou o envio: ${data.errorMessage}`);
+    }
+
+    const txId = data.transactionId || 'OK';
+
+    console.log(`[Smart RCS] Mensagem enviada com sucesso para ${cleanedPhone}. Transaction ID: ${txId}`);
     return {
       success: true,
-      log: `[Smart RCS] Enviado com sucesso. ID: ${rcsId}`
+      log: `[Smart RCS] Enviado com sucesso. Transaction ID: ${txId}`
     };
   } catch (error) {
     console.error(`[Smart RCS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);

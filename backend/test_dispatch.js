@@ -9,7 +9,7 @@ async function runTest() {
   const mockLead = {
     id: 8888,
     name: 'Caio Rodrigues',
-    phone: process.env.TEST_PHONE || '5521984354821',
+    phone: '5521995367414',
     email: process.env.TEST_EMAIL || 'caiovicenteti@gmail.com',
     debt_value: 149.90,
     due_date: '10/09/2026',
