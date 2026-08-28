@@ -240,7 +240,7 @@ app.get('/api/campaigns/:id/export', (req, res) => {
 /**
  * Pausar ou Interromper uma campanha ativa
  */
-app.post(['/api/campaigns/:id/pause', '/api/campaigns/:id/cancel'], (req, res) => {
+function handlePauseCampaign(req, res) {
   const { id } = req.params;
   try {
     const campaign = get('SELECT status FROM campaigns WHERE id = ?', [id]);
@@ -249,16 +249,20 @@ app.post(['/api/campaigns/:id/pause', '/api/campaigns/:id/cancel'], (req, res) =
     }
 
     // Marca como pausada no banco
-    run('UPDATE campaigns SET status = "paused" WHERE id = ?', [id]);
+    run("UPDATE campaigns SET status = 'paused' WHERE id = ?", [id]);
     // Libera os leads que estavam calling de volta para pending para não ficarem travados
     run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [id]);
     
     console.log(`[SERVER] Campanha #${id} foi PAUSADA com sucesso.`);
     res.json({ success: true, message: 'Campanha pausada com sucesso.' });
   } catch (error) {
+    console.error('[SERVER PAUSE ERROR]', error);
     res.status(500).json({ error: error.message });
   }
-});
+}
+
+app.post('/api/campaigns/:id/pause', handlePauseCampaign);
+app.post('/api/campaigns/:id/cancel', handlePauseCampaign);
 
 /**
  * Iniciar ou Retomar disparos de uma campanha
