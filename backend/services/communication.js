@@ -133,6 +133,9 @@ async function sendLocawebEmail(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
+  const baseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
+  const logoUrl = `${baseUrl}/logo_vero.png`;
+
   // Template HTML adaptado para a Vero Internet
   const htmlBody = `
 <!DOCTYPE html>
@@ -150,7 +153,7 @@ async function sendLocawebEmail(lead) {
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
           <tr>
             <td style="background-color:#ffffff;padding:24px 32px;text-align:left;border-bottom:1px solid #FAF7F4;">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/0/0a/Logo-vero-internet-png.png" alt="Vero Internet" height="42" style="display:block;">
+              <img src="${logoUrl}" alt="Vero Internet" height="42" style="display:block;">
             </td>
           </tr>
           <tr>
