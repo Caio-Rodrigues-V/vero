@@ -28,6 +28,14 @@ async function processCampaign(campaignId) {
 
       const provider = (campaign.dialer_provider || process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
 
+      // Auto-limpeza de segurança: resetar ou falhar chamadas presas em 'calling'/'in_progress' há mais de 3 minutos
+      run(
+        `UPDATE leads 
+         SET call_status = 'failed', occurrence = '999 - TIMEOUT_DISCAGEM', call_log = 'Timeout: Chamada sem callback do provedor por mais de 3 minutos' 
+         WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress') AND datetime(created_at) < datetime('now', '-3 minutes')`,
+        [campaignId]
+      );
+
       // 2. Verificar limite de chamadas ativas simultâneas (concorrência - Padrão 10 para Retell AI)
       const defaultLimit = provider === 'retell' ? 10 : 2;
       const concurrencyLimit = (campaign.concurrency_limit && campaign.concurrency_limit > 2) ? campaign.concurrency_limit : defaultLimit;
