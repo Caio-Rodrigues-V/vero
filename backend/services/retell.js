@@ -8,7 +8,7 @@ const { triggerN8NSmsWebhook } = require('./communication.js');
  */
 async function makeRetellCall(lead) {
   const apiKey = process.env.RETELL_API_KEY || 'key_a5dbdb38e3718d2aaa70862d1ad8';
-  const agentId = process.env.RETELL_AGENT_ID || 'agent_7bc0f8110f1a29b6f4c0151320';
+  const agentId = process.env.RETELL_AGENT_ID || 'agent_a48bf93903981faa827f4a8261';
   const fromNumber = process.env.RETELL_FROM_NUMBER || '551153301578';
 
   // Buscar assistente selecionado na campanha se houver
