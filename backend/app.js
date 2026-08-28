@@ -655,16 +655,26 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${endedReason}`);
 
-    // Determinar se a chamada foi atendida / bem-sucedida
+    // Determinar se a chamada foi atendida / conectada com sucesso
     const successReasons = [
       'assistant-completed-task', 
       'customer-ended-call', 
       'assistant-ended-call', 
       'customer-hung-up', 
-      'assistant-hung-up'
+      'assistant-hung-up',
+      'silence-timed-out',
+      'silence',
+      'assistant-said-end-call-phrase',
+      'normal-clearing',
+      'call-ended-by-assistant'
     ];
     
-    const isSuccess = successReasons.includes(endedReason) || (call?.duration > 5);
+    const hasTranscript = Boolean(call?.transcript && call.transcript.trim().length > 0);
+    const hasStarted = Boolean(call?.startedAt);
+    const hasDuration = Number(call?.duration || 0) > 0;
+    const hasMessages = Array.isArray(call?.messages) && call.messages.length > 0;
+
+    const isSuccess = successReasons.includes(endedReason) || hasTranscript || hasStarted || hasDuration || hasMessages;
     const callStatus = isSuccess ? 'completed' : 'failed';
     
     const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${call?.duration || 0}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
