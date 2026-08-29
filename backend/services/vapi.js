@@ -220,7 +220,7 @@ async function makeVapiCall(lead) {
   const cleanName = (lead.name || '')
     .replace(/\s*\([^)]*\)/g, '')
     .replace(/TESTE PROD/gi, '')
-    .trim() || lead.name;
+    .trim() || lead.name || 'Cliente';
 
   // Montar o corpo da requisição incluindo serverUrl em assistantOverrides para garantia do Webhook VAPI
   const body = {
