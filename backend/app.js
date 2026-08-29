@@ -605,59 +605,6 @@ app.get('/api/sample-file', (req, res) => {
 });
 
 /**
- * Recalcula e atualiza as estatísticas acumuladas de uma campanha no banco de dados.
- */
-function updateCampaignStats(campaignId) {
-  try {
-    const stats = get(`
-      SELECT 
-        COUNT(id) as total,
-        SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) as successful_calls,
-        SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
-        SUM(CASE WHEN sms_status = 'completed' AND (sms_log LIKE '%Transaction ID%' OR sms_log LIKE '%Enviado com sucesso%') THEN 1 ELSE 0 END) as successful_sms,
-        SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
-        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') AND email_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
-      FROM leads
-      WHERE campaign_id = ?
-    `, [campaignId]);
-
-    run(`
-      UPDATE campaigns 
-      SET processed_leads = ?,
-          successful_calls = ?,
-          failed_calls = ?,
-          successful_sms = ?,
-          failed_sms = ?
-      WHERE id = ?
-    `, [
-      stats.processed || 0,
-      stats.successful_calls || 0,
-      stats.failed_calls || 0,
-      stats.successful_sms || 0,
-      stats.failed_sms || 0,
-      campaignId
-    ]);
-
-    // Verificar se todos os leads desta campanha foram finalizados
-    const pendingLeads = get(`
-      SELECT COUNT(id) as count 
-      FROM leads 
-      WHERE campaign_id = ? 
-        AND (call_status IN ('pending', 'processing', 'calling') 
-             OR sms_status IN ('pending', 'processing', 'sending')
-             OR email_status IN ('pending', 'processing', 'sending'))
-    `, [campaignId]);
-
-    if (pendingLeads && pendingLeads.count === 0) {
-      run("UPDATE campaigns SET status = 'completed' WHERE id = ?", [campaignId]);
-      console.log(`[SERVER] Campanha #${campaignId} marcada como CONCLUÍDA.`);
-    }
-  } catch (err) {
-    console.error('[STATS UPDATE ERROR]', err);
-  }
-}
-
-/**
  * Endpoint de callback para o n8n atualizar o status do lead
  */
 app.post('/api/leads/update', (req, res) => {
