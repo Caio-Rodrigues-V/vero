@@ -235,6 +235,8 @@ async function makeVapiCall(lead) {
       campaign_id: lead.campaign_id
     },
     assistantOverrides: {
+      firstMessage: `Olá, eu falo com ${cleanName}, correto?`,
+      firstMessageMode: 'assistant-speaks-first',
       serverUrl: webhookUrl,
       variableValues: {
         NOME_DEV: cleanName,

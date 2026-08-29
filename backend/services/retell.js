@@ -29,9 +29,10 @@ async function makeRetellCall(lead) {
     phone = '55' + phone;
   }
 
-  // Formatar o número de destino com o Tech Prefix da Oktor se configurado (ex: 590835521984354821)
+  // Sanitizar o número de telefone removendo caracteres não numéricos
+  const cleanPhone = (lead.phone || '').replace(/\D/g, '');
   const techPrefix = process.env.RETELL_TECH_PREFIX || process.env.OKTOR_TECH_PREFIX || '59083';
-  const toNumber = techPrefix ? `${techPrefix}${phone}` : `+${phone}`;
+  const toNumber = techPrefix ? `${techPrefix}${cleanPhone}` : `+${cleanPhone}`;
 
   console.log(`[RETELL] Disparando chamada para Lead #${lead.id} (${lead.name}) -> ${toNumber} (BINA: ${fromNumber})`);
 
