@@ -17,8 +17,12 @@ build/
 
 # Databases and temp logs
 *.db
+*.db-shm
+*.db-wal
 *.log
 backend/vero_recovery.db
+backend/vero_recovery.db-shm
+backend/vero_recovery.db-wal
 backend/uploads/*
 !backend/uploads/.gitkeep
 
