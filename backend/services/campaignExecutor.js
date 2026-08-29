@@ -11,8 +11,8 @@ async function processCampaign(campaignId) {
   if (activeJobs.has(campaignId)) return;
   activeJobs.add(campaignId);
 
-  const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '1000', 10);
-  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 100 ? 1000 : paceDelayMs;
+  const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '5000', 10);
+  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 100 ? 5000 : paceDelayMs;
 
   console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Delay entre chamadas: ${safePaceDelay}ms)`);
 
