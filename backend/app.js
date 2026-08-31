@@ -952,15 +952,32 @@ app.get('/api/leads/:id/audio', async (req, res) => {
  * Rota Debug da Vapi API: Consulta a chamada bruta na API da Vapi e retorna a estrutura JSON completa
  */
 app.get('/api/vapi/call-debug/:call_id', async (req, res) => {
-  const { call_id } = req.params;
+  let callId = req.params.call_id;
   const apiKey = process.env.VAPI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ error: 'VAPI_API_KEY não configurada no servidor.' });
   }
 
+  // Se o parâmetro for numérico, buscar o lead no banco para obter o call_id real da Vapi
+  let leadInfo = null;
+  if (!isNaN(callId)) {
+    const lead = get('SELECT * FROM leads WHERE id = ?', [callId]);
+    if (lead) {
+      leadInfo = { id: lead.id, name: lead.name, phone: lead.phone, db_call_id: lead.call_id, db_recording_url: lead.recording_url };
+      callId = lead.call_id;
+    }
+  }
+
+  if (!callId) {
+    return res.status(404).json({ 
+      error: 'ID da chamada VAPI não encontrado.', 
+      leadInfo 
+    });
+  }
+
   try {
-    const vapiRes = await fetch(`https://api.vapi.ai/call/${call_id}`, {
+    const vapiRes = await fetch(`https://api.vapi.ai/call/${callId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -970,10 +987,12 @@ app.get('/api/vapi/call-debug/:call_id', async (req, res) => {
 
     const data = await vapiRes.json();
     res.json({
-      status: vapiRes.status,
+      queryId: req.params.call_id,
+      leadInfo,
+      vapiStatus: vapiRes.status,
       keysFound: Object.keys(data),
-      recordingUrl: data.recordingUrl || data.stereoRecordingUrl || data.artifact?.recordingUrl || null,
-      fullResponse: data
+      extractedRecordingUrl: data.recordingUrl || data.stereoRecordingUrl || data.artifact?.recordingUrl || data.artifact?.stereoRecordingUrl || data.artifactUrl || null,
+      fullVapiResponse: data
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
