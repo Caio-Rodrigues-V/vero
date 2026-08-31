@@ -238,6 +238,9 @@ async function makeVapiCall(lead) {
       firstMessage: `Olá, eu falo com ${cleanName}, correto?`,
       firstMessageMode: 'assistant-speaks-first',
       serverUrl: webhookUrl,
+      stopSpeakingPlan: {
+        numWords: 3
+      },
       variableValues: {
         NOME_DEV: cleanName,
         nome_cliente: cleanName,
