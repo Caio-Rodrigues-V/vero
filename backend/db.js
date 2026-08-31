@@ -26,6 +26,7 @@ try {
   }
 }
 
+const path = require('path');
 const dbPath = path.join(__dirname, 'vero_recovery.db');
 const db = new DatabaseSync(dbPath);
 
