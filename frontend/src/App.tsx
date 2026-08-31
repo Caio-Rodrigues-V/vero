@@ -1223,7 +1223,7 @@ export default function App() {
 
                           {/* Transcrição */}
                           <td className="py-3 px-4">
-                            {l.transcript ? (
+                            {l.call_status === 'completed' ? (
                               <button
                                 onClick={() => setSelectedTranscriptLead(l)}
                                 className="px-2 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[10px] font-bold hover:bg-purple-100 transition flex items-center gap-1"
