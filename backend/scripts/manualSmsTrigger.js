@@ -1,4 +1,7 @@
 const dotenv = require('dotenv');
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config();
 const { all, run, get } = require('../db.js');
 const { triggerN8NSmsWebhook } = require('../services/communication.js');
