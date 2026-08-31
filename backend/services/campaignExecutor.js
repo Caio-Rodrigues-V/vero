@@ -31,7 +31,7 @@ async function processCampaign(campaignId) {
       // Auto-limpeza de segurança: resetar ou falhar chamadas presas em 'calling'/'in_progress' há mais de 3 minutos
       run(
         `UPDATE leads 
-         SET call_status = 'failed', occurrence = '999 - TIMEOUT_DISCAGEM', call_log = 'Timeout: Chamada sem callback do provedor por mais de 3 minutos', updated_at = CURRENT_TIMESTAMP 
+         SET call_status = 'failed', sms_status = 'failed', sms_log = 'Cancelado: Timeout de chamada.', email_status = 'failed', email_log = 'Cancelado: Timeout de chamada.', occurrence = '999 - TIMEOUT_DISCAGEM', call_log = 'Timeout: Chamada sem callback do provedor por mais de 3 minutos', updated_at = CURRENT_TIMESTAMP 
          WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress') AND (created_at IS NULL OR datetime(created_at) < datetime('now', '-3 minutes'))`,
         [campaignId]
       );
@@ -132,7 +132,7 @@ async function processCampaign(campaignId) {
       } catch (err) {
         console.error(`[EXECUTOR ERROR] Falha no disparo do lead #${lead.id}:`, err.message);
         run(
-          `UPDATE leads SET call_status = 'failed', call_log = ? WHERE id = ?`,
+          `UPDATE leads SET call_status = 'failed', sms_status = 'failed', sms_log = 'Cancelado: Erro de execução.', email_status = 'failed', email_log = 'Cancelado: Erro de execução.', call_log = ? WHERE id = ?`,
           [`Erro de execução: ${err.message}`, lead.id]
         );
       }

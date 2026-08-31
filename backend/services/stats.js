@@ -14,7 +14,7 @@ function updateCampaignStats(campaignId) {
         SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
         SUM(CASE WHEN sms_status = 'completed' AND (sms_log LIKE '%Transaction ID%' OR sms_log LIKE '%Enviado com sucesso%') THEN 1 ELSE 0 END) as successful_sms,
         SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
-        SUM(CASE WHEN call_status IN ('completed', 'failed') AND sms_status IN ('completed', 'failed') AND email_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
+        SUM(CASE WHEN call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
       FROM leads
       WHERE campaign_id = ?
     `, [campaignId]);
@@ -42,9 +42,7 @@ function updateCampaignStats(campaignId) {
       SELECT COUNT(id) as count 
       FROM leads 
       WHERE campaign_id = ? 
-        AND (call_status IN ('pending', 'processing', 'calling') 
-             OR sms_status IN ('pending', 'processing', 'sending')
-             OR email_status IN ('pending', 'processing', 'sending'))
+        AND call_status IN ('pending', 'processing', 'calling')
     `, [campaignId]);
 
     if (pendingLeads && pendingLeads.count === 0) {
