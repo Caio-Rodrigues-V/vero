@@ -217,10 +217,16 @@ async function makeVapiCall(lead) {
   const webhookUrl = `${baseUrl}/api/vapi-webhook`;
 
   // Sanitizar o nome do cliente removendo sufixos de teste como (TESTE PROD)
-  const cleanName = (lead.name || '')
+  const rawName = (lead.name || '')
     .replace(/\s*\([^)]*\)/g, '')
     .replace(/TESTE PROD/gi, '')
     .trim() || lead.name || 'Cliente';
+
+  // Extrair apenas o primeiro nome (ex: "JONATAS BERNARDO NUNES" -> "Jonatas")
+  const firstWord = rawName.split(/\s+/)[0];
+  const firstName = firstWord 
+    ? firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase() 
+    : 'Cliente';
 
   // Montar o corpo da requisição incluindo serverUrl em assistantOverrides para garantia do Webhook VAPI
   const body = {
@@ -228,14 +234,14 @@ async function makeVapiCall(lead) {
     phoneNumberId: finalPhoneNumberId,
     customer: {
       number: phoneE164,
-      name: cleanName
+      name: firstName
     },
     metadata: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
     },
     assistantOverrides: {
-      firstMessage: `Olá, eu falo com ${cleanName}, correto?`,
+      firstMessage: `Olá, eu falo com ${firstName}, correto?`,
       firstMessageMode: 'assistant-speaks-first',
       serverUrl: webhookUrl,
       artifactPlan: {
@@ -248,8 +254,8 @@ async function makeVapiCall(lead) {
         numWords: 3
       },
       variableValues: {
-        NOME_DEV: cleanName,
-        nome_cliente: cleanName,
+        NOME_DEV: firstName,
+        nome_cliente: firstName,
         VAL_NOMINAL: valorFaturaText,
         valor_fatura: valorFaturaText,
         dias_atraso: diasAtrasoText,

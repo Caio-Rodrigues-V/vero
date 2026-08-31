@@ -37,6 +37,16 @@ async function makeRetellCall(lead) {
 
   console.log(`[RETELL] Disparando chamada para Lead #${lead.id} (${lead.name}) -> ${toNumber} (BINA: ${fromNumber})`);
 
+  const rawName = (lead.name || '')
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/TESTE PROD/gi, '')
+    .trim() || lead.name || 'Cliente';
+
+  const firstWord = rawName.split(/\s+/)[0];
+  const firstName = firstWord 
+    ? firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase() 
+    : 'Cliente';
+
   try {
     const response = await fetch('https://api.retellai.com/v2/create-phone-call', {
       method: 'POST',
@@ -49,8 +59,8 @@ async function makeRetellCall(lead) {
         to_number: toNumber,
         override_agent_id: campaignAgentId,
         retell_llm_dynamic_variables: {
-          nome: lead.name || 'Cliente',
-          nome_cliente: lead.name || 'Cliente',
+          nome: firstName,
+          nome_cliente: firstName,
           valor: lead.debt_value ? `R$ ${lead.debt_value}` : 'seu débito pendente',
           valor_fatura: lead.debt_value ? `R$ ${lead.debt_value}` : 'seu débito pendente',
           vencimento: lead.due_date || 'data recente',
