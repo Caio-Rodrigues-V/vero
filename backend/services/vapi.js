@@ -360,14 +360,26 @@ async function fetchVapiCallDetails(callId) {
       data.callAnalysis?.recordingUrl ||
       null;
 
-    const transcript = data.transcript || data.artifact?.transcript || null;
+    let transcript = data.transcript || data.artifact?.transcript || data.analysis?.transcript || null;
+    if (!transcript && Array.isArray(data.artifact?.messages)) {
+      transcript = data.artifact.messages
+        .filter(m => m.role && (m.message || m.content))
+        .map(m => `${m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente'}: ${m.message || m.content}`)
+        .join('\n');
+    }
+    if (!transcript && Array.isArray(data.messages)) {
+      transcript = data.messages
+        .filter(m => m.role && (m.message || m.content))
+        .map(m => `${m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente'}: ${m.message || m.content}`)
+        .join('\n');
+    }
 
-    console.log(`[VAPI FETCH OK] Call #${callId} -> recordingUrl: ${recordingUrl ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
+    console.log(`[VAPI FETCH OK] Call #${callId} -> recordingUrl: ${recordingUrl ? 'ENCONTRADO' : 'NÃO ENCONTRADO'} | transcript: ${transcript ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
 
     return {
       recordingUrl,
       transcript,
-      summary: data.summary || data.analysis?.summary || null,
+      summary: data.summary || data.analysis?.summary || data.artifact?.summary || null,
       endedReason: data.endedReason || null
     };
   } catch (err) {

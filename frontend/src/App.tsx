@@ -212,6 +212,19 @@ export default function App() {
     }
   };
 
+  const handleOpenTranscriptModal = (lead: Lead) => {
+    setSelectedTranscriptLead(lead);
+    fetch(`${BACKEND_URL}/api/leads/${lead.id}/details`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.lead) {
+          setSelectedTranscriptLead(data.lead);
+          setLeads(prev => prev.map(item => item.id === data.lead.id ? data.lead : item));
+        }
+      })
+      .catch(err => console.error('Error fetching live lead details:', err));
+  };
+
   // Poll for campaign updates if there is a processing campaign
   useEffect(() => {
     const hasActiveCampaign = campaigns.some(c => c.status === 'processing');
@@ -1225,7 +1238,7 @@ export default function App() {
                           <td className="py-3 px-4">
                             {l.call_status === 'completed' ? (
                               <button
-                                onClick={() => setSelectedTranscriptLead(l)}
+                                onClick={() => handleOpenTranscriptModal(l)}
                                 className="px-2 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[10px] font-bold hover:bg-purple-100 transition flex items-center gap-1"
                               >
                                 <MessageSquare size={12} />

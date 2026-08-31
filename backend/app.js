@@ -787,17 +787,38 @@ app.post('/api/vapi-webhook', async (req, res) => {
     const occurrence = classifyCallOccurrence({
       endedReason: call?.endedReason || call?.ended_reason,
       summary: call?.summary,
-      transcript: call?.transcript,
+      transcript: message?.transcript || call?.transcript || message?.artifact?.transcript || call?.artifact?.transcript,
       duration: call?.duration
     });
-    const transcriptText = call?.transcript || '';
+
+    let transcriptText = 
+      message?.transcript || 
+      call?.transcript || 
+      message?.artifact?.transcript || 
+      call?.artifact?.transcript || 
+      message?.analysis?.transcript || 
+      call?.analysis?.transcript || 
+      '';
+
+    if (!transcriptText && Array.isArray(message?.artifact?.messages)) {
+      transcriptText = message.artifact.messages
+        .filter(m => m.role && (m.message || m.content))
+        .map(m => `${m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente'}: ${m.message || m.content}`)
+        .join('\n');
+    }
+
     const recordingUrl = 
+      message?.recordingUrl || 
+      message?.stereoRecordingUrl || 
+      message?.monoRecordingUrl || 
+      message?.artifact?.recordingUrl || 
+      message?.artifact?.stereoRecordingUrl || 
+      message?.artifact?.monoRecordingUrl || 
       call?.recordingUrl || 
       call?.stereoRecordingUrl || 
+      call?.monoRecordingUrl || 
       call?.artifact?.recordingUrl || 
       call?.artifact?.stereoRecordingUrl || 
-      message?.artifact?.recordingUrl || 
-      message?.recordingUrl || 
       null;
 
     // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
@@ -885,6 +906,43 @@ app.post('/api/leads/trigger-manual-sms', async (req, res) => {
     runManualSend().catch(err => console.error('[MANUAL SMS ERROR]', err.message));
     res.json({ success: true, message: 'Disparo manual de SMS iniciado com sucesso.' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Rota para buscar os detalhes em tempo real de um lead (incluindo sincronização com a Vapi REST API)
+ */
+app.get('/api/leads/:id/details', async (req, res) => {
+  const { id } = req.params;
+  try {
+    let lead = get('SELECT * FROM leads WHERE id = ?', [id]);
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead não encontrado.' });
+    }
+
+    if (lead.call_id) {
+      const { fetchVapiCallDetails } = require('./services/vapi.js');
+      const details = await fetchVapiCallDetails(lead.call_id);
+      if (details) {
+        let updated = false;
+        if (details.recordingUrl && details.recordingUrl !== lead.recording_url) {
+          run('UPDATE leads SET recording_url = ? WHERE id = ?', [details.recordingUrl, lead.id]);
+          updated = true;
+        }
+        if (details.transcript && details.transcript !== lead.transcript) {
+          run('UPDATE leads SET transcript = ? WHERE id = ?', [details.transcript, lead.id]);
+          updated = true;
+        }
+        if (updated) {
+          lead = get('SELECT * FROM leads WHERE id = ?', [id]);
+        }
+      }
+    }
+
+    res.json({ success: true, lead });
+  } catch (error) {
+    console.error(`[LEAD DETAILS ERROR] Lead #${id}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
