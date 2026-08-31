@@ -151,7 +151,7 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 50;
   const offset = (page - 1) * limit;
-  const statusFilter = req.query.statusFilter || 'all';
+  const search = (req.query.search || '').trim();
 
   try {
     const campaign = get('SELECT id FROM campaigns WHERE id = ?', [id]);
@@ -170,6 +170,11 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
       whereClause += " AND call_status = 'failed'";
     } else if (statusFilter === 'pending') {
       whereClause += " AND call_status = 'pending'";
+    }
+
+    if (search) {
+      whereClause += " AND (name LIKE ? OR phone LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`);
     }
 
     const leadsQuery = `SELECT * FROM leads ${whereClause} ORDER BY id ASC LIMIT ? OFFSET ?`;

@@ -291,9 +291,9 @@ export default function App() {
     }
   };
 
-  const fetchLeads = async (campaignId: number, page: number, currentStatusFilter: string = statusFilter) => {
+  const fetchLeads = async (campaignId: number, page: number, currentStatusFilter: string = statusFilter, currentSearchTerm: string = searchTerm) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10&statusFilter=${currentStatusFilter}`);
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10&statusFilter=${currentStatusFilter}&search=${encodeURIComponent(currentSearchTerm)}`);
       if (res.ok) {
         const data = await res.json();
         setLeads(data.leads);
@@ -1162,7 +1162,12 @@ export default function App() {
                       type="text" 
                       placeholder="Buscar por Nome ou Telefone..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchTerm(val);
+                        setLeadsPage(1);
+                        if (selectedCampaignId) fetchLeads(selectedCampaignId, 1, statusFilter, val);
+                      }}
                       className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full sm:w-64 focus:outline-none focus:border-vero-magenta"
                     />
                   </div>
