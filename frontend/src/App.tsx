@@ -1238,7 +1238,7 @@ export default function App() {
 
                           {/* Áudio Gravado */}
                           <td className="py-3 px-4">
-                            {(l.recording_url || l.call_id) ? (
+                            {(l.call_status === 'completed' && (l.recording_url || l.call_id)) ? (
                               <a
                                 href={`${BACKEND_URL}/api/leads/${l.id}/audio`}
                                 target="_blank"
