@@ -1020,6 +1020,16 @@ app.get('/api/vapi/call-debug/:call_id', async (req, res) => {
     return res.status(500).json({ error: 'VAPI_API_KEY não configurada no servidor.' });
   }
 
+  // Se o parâmetro for 'latest', retorna os últimos 10 leads registrados no banco com seus IDs e Call IDs
+  if (callId === 'latest' || callId === 'recentes') {
+    const recentLeads = all('SELECT id, name, phone, call_status, occurrence, call_id, recording_url, transcript FROM leads ORDER BY id DESC LIMIT 10');
+    return res.json({
+      message: 'Últimos 10 leads registrados no banco.',
+      totalFound: recentLeads.length,
+      leads: recentLeads
+    });
+  }
+
   // Se o parâmetro for numérico, buscar o lead no banco para obter o call_id real da Vapi
   let leadInfo = null;
   if (!isNaN(callId)) {
@@ -1027,13 +1037,23 @@ app.get('/api/vapi/call-debug/:call_id', async (req, res) => {
     if (lead) {
       leadInfo = { id: lead.id, name: lead.name, phone: lead.phone, db_call_id: lead.call_id, db_recording_url: lead.recording_url };
       callId = lead.call_id;
+    } else {
+      // Se o ID numérico específico não foi encontrado, tenta buscar por parte do nome ou telefone
+      const leadBySearch = get('SELECT * FROM leads WHERE name LIKE ? OR phone LIKE ? ORDER BY id DESC LIMIT 1', [`%${req.params.call_id}%`, `%${req.params.call_id}%`]);
+      if (leadBySearch) {
+        leadInfo = { id: leadBySearch.id, name: leadBySearch.name, phone: leadBySearch.phone, db_call_id: leadBySearch.call_id, db_recording_url: leadBySearch.recording_url };
+        callId = leadBySearch.call_id;
+      }
     }
   }
 
   if (!callId) {
+    const recentLeads = all('SELECT id, name, phone, call_status, occurrence, call_id FROM leads ORDER BY id DESC LIMIT 5');
     return res.status(404).json({ 
-      error: 'ID da chamada VAPI não encontrado.', 
-      leadInfo 
+      error: `Lead ou Call ID '${req.params.call_id}' não foi encontrado no banco local.`, 
+      leadInfo,
+      dica: 'Você pode passar o ID numérico correto do lead (ex: /api/vapi/call-debug/1) ou o Call ID UUID da Vapi.',
+      ultimosLeadsRegistrados: recentLeads
     });
   }
 
@@ -1053,6 +1073,7 @@ app.get('/api/vapi/call-debug/:call_id', async (req, res) => {
       vapiStatus: vapiRes.status,
       keysFound: Object.keys(data),
       extractedRecordingUrl: data.recordingUrl || data.stereoRecordingUrl || data.artifact?.recordingUrl || data.artifact?.stereoRecordingUrl || data.artifactUrl || null,
+      extractedTranscript: data.transcript || data.artifact?.transcript || null,
       fullVapiResponse: data
     });
   } catch (err) {
