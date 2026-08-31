@@ -92,7 +92,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Selected Campaign for Leads view
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | 'all' | null>('all');
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | 'all' | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsPage, setLeadsPage] = useState(1);
   const [leadsTotalPages, setLeadsTotalPages] = useState(1);
