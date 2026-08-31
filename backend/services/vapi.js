@@ -1,7 +1,7 @@
 const dotenv = require('dotenv');
-const { SYSTEM_PROMPT_TEMPLATE, FIRST_MESSAGE_TEMPLATE } = require('../config/agentPrompt.js');
-const { get } = require('../db.js');
-
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config();
 
 /**
@@ -312,7 +312,11 @@ async function makeVapiCall(lead) {
  */
 async function fetchVapiCallDetails(callId) {
   const apiKey = process.env.VAPI_API_KEY;
-  if (!apiKey || !callId) return null;
+  if (!apiKey) {
+    console.error('[VAPI FETCH WARN] VAPI_API_KEY não está configurada no process.env!');
+    return null;
+  }
+  if (!callId) return null;
 
   try {
     const response = await fetch(`https://api.vapi.ai/call/${callId}`, {
@@ -323,11 +327,33 @@ async function fetchVapiCallDetails(callId) {
       }
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`[VAPI FETCH ERROR] Call #${callId} HTTP ${response.status}`);
+      return null;
+    }
     const data = await response.json();
+
+    const recordingUrl = 
+      data.recordingUrl || 
+      data.stereoRecordingUrl || 
+      data.monoRecordingUrl ||
+      data.recording ||
+      data.artifactUrl ||
+      data.artifact?.recordingUrl || 
+      data.artifact?.stereoRecordingUrl || 
+      data.artifact?.monoRecordingUrl ||
+      data.artifact?.recording ||
+      data.artifact?.artifactUrl ||
+      data.callAnalysis?.recordingUrl ||
+      null;
+
+    const transcript = data.transcript || data.artifact?.transcript || null;
+
+    console.log(`[VAPI FETCH OK] Call #${callId} -> recordingUrl: ${recordingUrl ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
+
     return {
-      recordingUrl: data.recordingUrl || data.stereoRecordingUrl || data.artifact?.recordingUrl || data.artifact?.stereoRecordingUrl || null,
-      transcript: data.transcript || data.artifact?.transcript || null,
+      recordingUrl,
+      transcript,
       summary: data.summary || data.analysis?.summary || null,
       endedReason: data.endedReason || null
     };
