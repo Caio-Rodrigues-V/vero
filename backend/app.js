@@ -852,6 +852,19 @@ app.post('/api/vapi-webhook', async (req, res) => {
 });
 
 /**
+ * Rota para disparo manual imediato de SMS para a lista de leads selecionada
+ */
+app.post('/api/leads/trigger-manual-sms', async (req, res) => {
+  try {
+    const { runManualSend } = require('./scripts/manualSmsTrigger.js');
+    runManualSend().catch(err => console.error('[MANUAL SMS ERROR]', err.message));
+    res.json({ success: true, message: 'Disparo manual de SMS iniciado com sucesso.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Fallback para qualquer rota que não seja da API (Servir o Single Page Application)
  */
 app.get('*', (req, res, next) => {
