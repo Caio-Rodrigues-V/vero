@@ -2,6 +2,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 const { all, run, get } = require('../db.js');
 const { triggerN8NSmsWebhook } = require('../services/communication.js');
+const { updateCampaignStats } = require('../services/stats.js');
 
 const targetList = [
   { name: 'AGNALDO PEDRO DE ALCANTARA', phone: '5519997827034' },
@@ -53,9 +54,14 @@ async function runManualSend() {
         [result.log, lead.id]
       );
     }
+
+    // Recalcular e sincronizar as estatísticas da campanha para atualizar o Dashboard em tempo real
+    if (lead.campaign_id) {
+      updateCampaignStats(lead.campaign_id);
+    }
   }
 
-  console.log('\n=== DISPARO MANUAL CONCLUÍDO ===');
+  console.log('\n=== DISPARO MANUAL CONCLUÍDO E DASHBOARD SINCRONIZADO ===');
 }
 
 if (require.main === module) {
