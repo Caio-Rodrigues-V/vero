@@ -949,6 +949,38 @@ app.get('/api/leads/:id/audio', async (req, res) => {
 });
 
 /**
+ * Rota Debug da Vapi API: Consulta a chamada bruta na API da Vapi e retorna a estrutura JSON completa
+ */
+app.get('/api/vapi/call-debug/:call_id', async (req, res) => {
+  const { call_id } = req.params;
+  const apiKey = process.env.VAPI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'VAPI_API_KEY não configurada no servidor.' });
+  }
+
+  try {
+    const vapiRes = await fetch(`https://api.vapi.ai/call/${call_id}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await vapiRes.json();
+    res.json({
+      status: vapiRes.status,
+      keysFound: Object.keys(data),
+      recordingUrl: data.recordingUrl || data.stereoRecordingUrl || data.artifact?.recordingUrl || null,
+      fullResponse: data
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * Fallback para qualquer rota que não seja da API (Servir o Single Page Application)
  */
 app.get('*', (req, res, next) => {
