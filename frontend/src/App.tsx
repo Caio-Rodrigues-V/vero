@@ -92,7 +92,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Selected Campaign for Leads view
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | 'all' | null>('all');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsPage, setLeadsPage] = useState(1);
   const [leadsTotalPages, setLeadsTotalPages] = useState(1);
@@ -291,7 +291,7 @@ export default function App() {
     }
   };
 
-  const fetchLeads = async (campaignId: number, page: number, currentStatusFilter: string = statusFilter, currentSearchTerm: string = searchTerm) => {
+  const fetchLeads = async (campaignId: number | 'all', page: number, currentStatusFilter: string = statusFilter, currentSearchTerm: string = searchTerm) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10&statusFilter=${currentStatusFilter}&search=${encodeURIComponent(currentSearchTerm)}`);
       if (res.ok) {
@@ -305,7 +305,7 @@ export default function App() {
     }
   };
 
-  const handleCampaignSelect = (id: number) => {
+  const handleCampaignSelect = (id: number | 'all') => {
     setSelectedCampaignId(id);
     setLeadsPage(1);
     fetchLeads(id, 1);
@@ -1121,10 +1121,14 @@ export default function App() {
                 <div className="space-y-1">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Campanha Selecionada</span>
                   <select 
-                    value={selectedCampaignId || ''} 
-                    onChange={(e) => handleCampaignSelect(Number(e.target.value))}
+                    value={selectedCampaignId || 'all'} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleCampaignSelect(val === 'all' ? 'all' : Number(val));
+                    }}
                     className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
                   >
+                    <option value="all">🔍 Todas as Campanhas (Busca Global)</option>
                     {campaigns.map(c => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({c.total_leads} leads)

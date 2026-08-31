@@ -154,13 +154,8 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
   const search = (req.query.search || '').trim();
 
   try {
-    const campaign = get('SELECT id FROM campaigns WHERE id = ?', [id]);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campanha não encontrada' });
-    }
-
-    let whereClause = 'WHERE campaign_id = ?';
-    const params = [id];
+    let whereClause = id === 'all' ? 'WHERE 1=1' : 'WHERE campaign_id = ?';
+    const params = id === 'all' ? [] : [id];
 
     if (statusFilter === 'delivered' || statusFilter === 'completed') {
       whereClause += " AND call_status = 'completed'";
