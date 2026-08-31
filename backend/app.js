@@ -900,16 +900,21 @@ app.get('/api/leads/:id/audio', async (req, res) => {
       return res.status(404).send('Lead não encontrado.');
     }
 
-    let audioUrl = lead.recording_url;
+    const { fetchVapiCallDetails } = require('./services/vapi.js');
+    let audioUrl = null;
 
-    // Se ainda não tiver a URL salva mas tiver call_id, consulta a API REST da Vapi
-    if (!audioUrl && lead.call_id) {
-      const { fetchVapiCallDetails } = require('./services/vapi.js');
+    // 1. Buscar a URL de gravação atualizada diretamente da API REST da Vapi
+    if (lead.call_id) {
       const details = await fetchVapiCallDetails(lead.call_id);
       if (details?.recordingUrl) {
         audioUrl = details.recordingUrl;
         run('UPDATE leads SET recording_url = ? WHERE id = ?', [audioUrl, lead.id]);
       }
+    }
+
+    // 2. Fallback para a URL já salva no banco
+    if (!audioUrl) {
+      audioUrl = lead.recording_url;
     }
 
     if (!audioUrl) {
@@ -925,12 +930,13 @@ app.get('/api/leads/:id/audio', async (req, res) => {
     let audioRes = await fetch(audioUrl, { headers });
 
     if (!audioRes.ok) {
-      // Tentar requisição direta se o link pré-assinado rejeitar o cabeçalho Authorization
+      // Tentar sem o cabeçalho Authorization caso a S3 exija presigned URL pura
       audioRes = await fetch(audioUrl);
     }
 
     if (!audioRes.ok) {
-      return res.status(audioRes.status).send('Erro ao carregar o áudio do servidor remoto.');
+      console.error(`[AUDIO PROXY FAIL] Lead #${id} | URL: ${audioUrl} | HTTP Status: ${audioRes.status}`);
+      return res.status(audioRes.status).send(`Erro HTTP ${audioRes.status} ao carregar o áudio na Vapi.`);
     }
 
     const buffer = Buffer.from(await audioRes.arrayBuffer());
@@ -938,7 +944,7 @@ app.get('/api/leads/:id/audio', async (req, res) => {
     return res.send(buffer);
   } catch (error) {
     console.error(`[AUDIO PROXY ERROR] Lead #${id}:`, error.message);
-    res.status(500).send(`Erro ao transmitir áudio: ${error.message}`);
+    res.status(500).send(`Exceção ao transmitir áudio: ${error.message}`);
   }
 });
 
