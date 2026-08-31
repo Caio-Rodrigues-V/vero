@@ -216,17 +216,24 @@ async function makeVapiCall(lead) {
   const baseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
   const webhookUrl = `${baseUrl}/api/vapi-webhook`;
 
-  // Sanitizar o nome do cliente removendo sufixos de teste como (TESTE PROD)
   const rawName = (lead.name || '')
     .replace(/\s*\([^)]*\)/g, '')
     .replace(/TESTE PROD/gi, '')
     .trim() || lead.name || 'Cliente';
 
-  // Extrair apenas o primeiro nome (ex: "JONATAS BERNARDO NUNES" -> "Jonatas")
-  const firstWord = rawName.split(/\s+/)[0];
-  const firstName = firstWord 
-    ? firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase() 
-    : 'Cliente';
+  // Extrair primeiro e segundo nome (ex: "JONATAS BERNARDO NUNES" -> "Jonatas Bernardo", "DENISIANE DA CRUZ" -> "Denisiane da Cruz")
+  const words = rawName.split(/\s+/).filter(Boolean);
+  const preps = ['de', 'da', 'do', 'dos', 'das'];
+  let wordCount = 2;
+  if (words.length > 2 && preps.includes(words[1].toLowerCase())) {
+    wordCount = 3;
+  }
+  const selectedWords = words.slice(0, Math.min(wordCount, words.length));
+  const shortName = selectedWords.map((w, idx) => {
+    const lower = w.toLowerCase();
+    if (idx > 0 && preps.includes(lower)) return lower;
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  }).join(' ') || 'Cliente';
 
   // Montar o corpo da requisição incluindo serverUrl em assistantOverrides para garantia do Webhook VAPI
   const body = {
@@ -234,14 +241,14 @@ async function makeVapiCall(lead) {
     phoneNumberId: finalPhoneNumberId,
     customer: {
       number: phoneE164,
-      name: firstName
+      name: shortName
     },
     metadata: {
       lead_id: lead.id,
       campaign_id: lead.campaign_id
     },
     assistantOverrides: {
-      firstMessage: `Olá, eu falo com ${firstName}, correto?`,
+      firstMessage: `Olá, eu falo com ${shortName}, correto?`,
       firstMessageMode: 'assistant-speaks-first',
       serverUrl: webhookUrl,
       artifactPlan: {
@@ -254,8 +261,8 @@ async function makeVapiCall(lead) {
         numWords: 3
       },
       variableValues: {
-        NOME_DEV: firstName,
-        nome_cliente: firstName,
+        NOME_DEV: shortName,
+        nome_cliente: shortName,
         VAL_NOMINAL: valorFaturaText,
         valor_fatura: valorFaturaText,
         dias_atraso: diasAtrasoText,
