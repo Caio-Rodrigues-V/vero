@@ -180,7 +180,7 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
   }
 
   // Fallback geral se atendido
-  return 'TENTATIVA - ATENDIMENTO NÃO TABULADO';
+  return 'TENTATIVA - LIGAÇÃO MUDA / DESLIGOU';
 }
 
 module.exports = {

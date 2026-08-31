@@ -1187,7 +1187,15 @@ export default function App() {
                           <td className="py-3 px-4 font-bold text-slate-700">{formatBRL(l.debt_value)}</td>
                           <td className="py-3 px-4">{l.due_date}</td>
                           <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 bg-rose-50 text-vero-magenta rounded border border-rose-100 font-bold text-[10px]">
+                            <span className={`px-2 py-0.5 rounded border font-bold text-[10px] ${
+                              (l.occurrence?.includes('PROMESSA') || l.occurrence?.includes('PAGAMENTO')) 
+                                ? 'bg-green-50 text-green-700 border-green-200'
+                                : (l.occurrence?.includes('DESCONHECIDO') || l.occurrence?.includes('FALECIDO'))
+                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                : (l.occurrence?.includes('TENTATIVA') || l.occurrence?.includes('MUDA') || l.occurrence?.includes('NÃO ATENDE'))
+                                ? 'bg-slate-100 text-slate-700 border-slate-200'
+                                : 'bg-rose-50 text-vero-magenta border-rose-100'
+                            }`}>
                               {l.occurrence || 'AGUARDANDO CONTATO'}
                             </span>
                           </td>
