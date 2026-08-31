@@ -99,6 +99,7 @@ function initDb() {
   safeAddColumn('leads', 'call_id TEXT');
   safeAddColumn('leads', 'call_duration INTEGER DEFAULT 0');
   safeAddColumn('leads', 'transcript TEXT');
+  safeAddColumn('leads', 'recording_url TEXT');
   safeAddColumn('leads', 'created_at DATETIME');
   safeAddColumn('leads', 'updated_at DATETIME');
 

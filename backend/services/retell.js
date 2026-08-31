@@ -135,6 +135,8 @@ async function handleRetellWebhook(eventData) {
       duration: durationSeconds
     });
 
+    const recordingUrl = call.recording_url || call.public_log_url || null;
+
     // Gravar no banco de dados local
     run(
       `UPDATE leads SET 
@@ -142,9 +144,10 @@ async function handleRetellWebhook(eventData) {
         call_duration = ?, 
         transcript = ?, 
         occurrence = ?, 
+        recording_url = COALESCE(?, recording_url),
         updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?`,
-      [finalCallStatus, durationSeconds, transcript, occurrenceText, lead.id]
+      [finalCallStatus, durationSeconds, transcript, occurrenceText, recordingUrl, lead.id]
     );
 
     // Se a chamada foi concluída e qualificou na regra CPC de envio de SMS

@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Sparkles,
   MessageSquare,
+  Volume2,
   X,
   Filter
 } from 'lucide-react';
@@ -51,6 +52,7 @@ interface Lead {
   email_status?: 'pending' | 'processing' | 'sending' | 'completed' | 'failed';
   email_log?: string;
   transcript?: string;
+  recording_url?: string;
 }
 
 interface DashboardStats {
@@ -1149,6 +1151,7 @@ export default function App() {
                       <th className="py-3 px-4">Ocorrência (Tabulação)</th>
                       <th className="py-3 px-4">Status VAPI (Ligação)</th>
                       <th className="py-3 px-4">Transcrição</th>
+                      <th className="py-3 px-4">Áudio Gravado</th>
                       <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status SMS</th>
                       <th className="py-3 px-4">Log do SMS</th>
@@ -1203,7 +1206,24 @@ export default function App() {
                                 Ver Diálogo
                               </button>
                             ) : (
-                              <span className="text-slate-300 text-[10px] italic">Sem áudio</span>
+                              <span className="text-slate-300 text-[10px] italic">Sem texto</span>
+                            )}
+                          </td>
+
+                          {/* Áudio Gravado */}
+                          <td className="py-3 px-4">
+                            {l.recording_url ? (
+                              <a
+                                href={l.recording_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[10px] font-bold hover:bg-sky-100 transition inline-flex items-center gap-1"
+                              >
+                                <Volume2 size={12} />
+                                Ouvir Áudio
+                              </a>
+                            ) : (
+                              <span className="text-slate-300 text-[10px] italic">Sem gravação</span>
                             )}
                           </td>
 
@@ -1372,7 +1392,13 @@ export default function App() {
             </div>
 
             <div className="overflow-y-auto flex-1 space-y-3 p-3 bg-slate-50 rounded-xl text-xs">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição Bruta da Ligação VAPI</span>
+              {selectedTranscriptLead.recording_url && (
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gravação do Áudio da Chamada</span>
+                  <audio controls src={selectedTranscriptLead.recording_url} className="w-full h-8" />
+                </div>
+              )}
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição Bruta da Ligação</span>
               <div className="whitespace-pre-wrap font-mono text-slate-700 leading-relaxed bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                 {selectedTranscriptLead.transcript || 'Nenhuma transcrição gravada para esta chamada.'}
               </div>

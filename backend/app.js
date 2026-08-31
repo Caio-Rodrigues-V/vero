@@ -773,13 +773,14 @@ app.post('/api/vapi-webhook', async (req, res) => {
       duration: call?.duration
     });
     const transcriptText = call?.transcript || '';
+    const recordingUrl = call?.recordingUrl || call?.stereoRecordingUrl || call?.artifact?.recordingUrl || call?.artifact?.stereoRecordingUrl || null;
 
-    // Atualizar o lead com o status, log, ocorrência e transcrição da ligação
+    // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
     run(
       `UPDATE leads 
-       SET call_status = ?, call_log = ?, occurrence = ?, transcript = ? 
+       SET call_status = ?, call_log = ?, occurrence = ?, transcript = ?, recording_url = COALESCE(?, recording_url) 
        WHERE id = ?`,
-      [callStatus, logText, occurrence, transcriptText, leadId]
+      [callStatus, logText, occurrence, transcriptText, recordingUrl, leadId]
     );
 
     // Regra de Negócio Precisa: Só envia SMS/E-mail se o cliente atendeu E formalizou/confirmou expressamente (CPC / Promessa)
