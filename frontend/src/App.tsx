@@ -53,6 +53,7 @@ interface Lead {
   email_log?: string;
   transcript?: string;
   recording_url?: string;
+  call_id?: string;
 }
 
 interface DashboardStats {
@@ -1229,9 +1230,9 @@ export default function App() {
 
                           {/* Áudio Gravado */}
                           <td className="py-3 px-4">
-                            {l.recording_url ? (
+                            {(l.recording_url || l.call_id) ? (
                               <a
-                                href={l.recording_url}
+                                href={`${BACKEND_URL}/api/leads/${l.id}/audio`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="px-2 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[10px] font-bold hover:bg-sky-100 transition inline-flex items-center gap-1"
@@ -1409,10 +1410,10 @@ export default function App() {
             </div>
 
             <div className="overflow-y-auto flex-1 space-y-3 p-3 bg-slate-50 rounded-xl text-xs">
-              {selectedTranscriptLead.recording_url && (
+              {(selectedTranscriptLead.recording_url || selectedTranscriptLead.call_id) && (
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gravação do Áudio da Chamada</span>
-                  <audio controls src={selectedTranscriptLead.recording_url} className="w-full h-8" />
+                  <audio controls src={`${BACKEND_URL}/api/leads/${selectedTranscriptLead.id}/audio`} className="w-full h-8" />
                 </div>
               )}
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição Bruta da Ligação</span>

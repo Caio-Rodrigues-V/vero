@@ -890,6 +890,59 @@ app.post('/api/leads/trigger-manual-sms', async (req, res) => {
 });
 
 /**
+ * Rota Proxy de Áudio da Chamada: Autentica com a API da Vapi/S3 e transmite o streaming de áudio diretamente para o navegador sem erros de permissão do S3
+ */
+app.get('/api/leads/:id/audio', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const lead = get('SELECT * FROM leads WHERE id = ?', [id]);
+    if (!lead) {
+      return res.status(404).send('Lead não encontrado.');
+    }
+
+    let audioUrl = lead.recording_url;
+
+    // Se ainda não tiver a URL salva mas tiver call_id, consulta a API REST da Vapi
+    if (!audioUrl && lead.call_id) {
+      const { fetchVapiCallDetails } = require('./services/vapi.js');
+      const details = await fetchVapiCallDetails(lead.call_id);
+      if (details?.recordingUrl) {
+        audioUrl = details.recordingUrl;
+        run('UPDATE leads SET recording_url = ? WHERE id = ?', [audioUrl, lead.id]);
+      }
+    }
+
+    if (!audioUrl) {
+      return res.status(404).send('Gravação de áudio não disponível para este lead.');
+    }
+
+    const apiKey = process.env.VAPI_API_KEY;
+    const headers = {};
+    if (apiKey && audioUrl.includes('vapi')) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    let audioRes = await fetch(audioUrl, { headers });
+
+    if (!audioRes.ok) {
+      // Tentar requisição direta se o link pré-assinado rejeitar o cabeçalho Authorization
+      audioRes = await fetch(audioUrl);
+    }
+
+    if (!audioRes.ok) {
+      return res.status(audioRes.status).send('Erro ao carregar o áudio do servidor remoto.');
+    }
+
+    const buffer = Buffer.from(await audioRes.arrayBuffer());
+    res.setHeader('Content-Type', audioRes.headers.get('content-type') || 'audio/wav');
+    return res.send(buffer);
+  } catch (error) {
+    console.error(`[AUDIO PROXY ERROR] Lead #${id}:`, error.message);
+    res.status(500).send(`Erro ao transmitir áudio: ${error.message}`);
+  }
+});
+
+/**
  * Fallback para qualquer rota que não seja da API (Servir o Single Page Application)
  */
 app.get('*', (req, res, next) => {
