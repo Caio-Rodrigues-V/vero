@@ -431,8 +431,8 @@ export default function App() {
                 : `[SIMULADOR] Chamada não completada. Ocorrência: ${occurrence}.`,
               sms_status: smsSuccess ? 'completed' : 'failed',
               sms_log: smsSuccess 
-                ? '[SIMULADOR] RCS Entregue e Lido' 
-                : '[SIMULADOR] Falha na rede RCS / Operadora.',
+                ? '[SIMULADOR] SMS Entregue e Lido' 
+                : '[SIMULADOR] Falha na rede SMS / Operadora.',
               occurrence: occurrence
             })
           });
@@ -583,7 +583,7 @@ export default function App() {
                 </div>
 
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">SMS (RCS) Enviados</span>
+                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">SMS Enviados</span>
                   <div className="flex items-baseline justify-between mt-2">
                     <span className="text-3xl font-extrabold text-slate-800">
                       {stats.total_successful_sms ? stats.total_successful_sms.toLocaleString() : 0}
@@ -609,7 +609,7 @@ export default function App() {
                           <th className="py-3 px-4 text-center">Total Leads</th>
                           <th className="py-3 px-4">Progresso Geral</th>
                           <th className="py-3 px-4 text-center">Ligações</th>
-                          <th className="py-3 px-4 text-center">RCS</th>
+                          <th className="py-3 px-4 text-center">SMS</th>
                           <th className="py-3 px-4 text-center">Status</th>
                         </tr>
                       </thead>
@@ -774,7 +774,7 @@ export default function App() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <h3 className="text-base font-bold text-slate-800">Distribuição de Ocorrências (Tabulações DDM)</h3>
-                    <p className="text-xs text-slate-400">Classificação em tempo real com base nos retornos da VAPI e Smart RCS</p>
+                    <p className="text-xs text-slate-400">Classificação em tempo real com base nos retornos da VAPI e SMS</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-slate-500">Filtrar por Campanha:</span>
@@ -1117,7 +1117,7 @@ export default function App() {
                     >
                       <option value="all">Todos os Leads</option>
                       <option value="delivered">🟢 Somente Ligações Atendidas</option>
-                      <option value="sms_delivered">📲 Somente Smart RCS Entregues</option>
+                      <option value="sms_delivered">📲 Somente SMS Entregues</option>
                       <option value="failed">🩶 Não Atendidas</option>
                       <option value="pending">⏳ Pendentes</option>
                     </select>
@@ -1150,8 +1150,8 @@ export default function App() {
                       <th className="py-3 px-4">Status VAPI (Ligação)</th>
                       <th className="py-3 px-4">Transcrição</th>
                       <th className="py-3 px-4">Log de Voz VAPI</th>
-                      <th className="py-3 px-4">Status RCS</th>
-                      <th className="py-3 px-4">Log do RCS</th>
+                      <th className="py-3 px-4">Status SMS</th>
+                      <th className="py-3 px-4">Log do SMS</th>
                       <th className="py-3 px-4">Status E-mail</th>
                       <th className="py-3 px-4">Log de E-mail</th>
                     </tr>
@@ -1211,7 +1211,7 @@ export default function App() {
                             {l.call_log || 'Nenhum registro'}
                           </td>
 
-                          {/* Status SMS / RCS */}
+                          {/* Status SMS */}
                           <td className="py-3 px-4">
                             <span className={`px-2 py-0.5 rounded font-bold ${
                               l.sms_status === 'completed' && 'bg-green-50 text-green-700'
@@ -1305,7 +1305,7 @@ export default function App() {
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Exportar Campanhas de Recuperação</h3>
                   <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
-                    Baixe o resultado completo das ligações VAPI e envios de RCS. O relatório contém as transcrições das chamadas e logs do Smart RCS.
+                    Baixe o resultado completo das ligações VAPI e envios de SMS. O relatório contém as transcrições das chamadas e logs de SMS.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

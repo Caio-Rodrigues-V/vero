@@ -10,6 +10,7 @@ const { parseSpreadsheet } = require('./utils/parser.js');
 const { triggerCampaignProcessor, startMonitorLoop } = require('./services/campaignExecutor.js');
 const { updateCampaignStats } = require('./services/stats.js');
 const xlsx = require('xlsx');
+const { classifyCallOccurrence, validCpcOccurrences } = require('./utils/classifier.js');
 
 dotenv.config();
 
@@ -646,75 +647,7 @@ app.post('/api/leads/update', (req, res) => {
   }
 });
 
-/**
- * Analisador inteligente de conversações para classificar ocorrências baseadas nas regras da Vero
- */
-function classifyOccurrence(call) {
-  const reason = call.endedReason;
-  const summary = (call.summary || '').toLowerCase();
-  const transcript = (call.transcript || '').toLowerCase();
-  const duration = call.duration || 0;
-
-  // 1. Falhas e tentativas automáticas da operadora
-  if (reason === 'voicemail') {
-    return 'TENTATIVA - MAQUINA MENSAGEM AUTOMATICA';
-  }
-  if (reason === 'no-answer') {
-    return 'TENTATIVA - NÃO ATENDE';
-  }
-  if (reason === 'busy') {
-    return 'TENTATIVA - OCUPADO';
-  }
-  if (reason === 'network-error' || reason === 'error') {
-    return 'TENTATIVA - ERRO DISCAGEM';
-  }
-
-  // 2. Quedas e abandonos rápidos
-  if (reason === 'customer-hung-up' && duration < 8) {
-    return 'TENTATIVA - ABANDONO';
-  }
-
-  const combinedText = `${summary} ${transcript}`;
-
-  // 3. Classificações com base na fala do cliente (CPC)
-  if (combinedText.includes('faleceu') || combinedText.includes('falecimento') || combinedText.includes('morreu') || combinedText.includes('óbito') || combinedText.includes('obito')) {
-    return 'FALECIDO';
-  }
-  if (combinedText.includes('não conhece') || combinedText.includes('numero errado') || combinedText.includes('número errado') || combinedText.includes('não é ele') || combinedText.includes('não é ela') || combinedText.includes('desconhecido') || combinedText.includes('desconhece a pessoa')) {
-    return 'CLIENTE DESCONHECIDO';
-  }
-  if (combinedText.includes('já pagou') || combinedText.includes('ja pagou') || combinedText.includes('pagamento feito') || combinedText.includes('pago')) {
-    return 'ALEGA PAGAMENTO - SEM COMPROVANTE';
-  }
-  if (combinedText.includes('promessa') || combinedText.includes('vou pagar') || combinedText.includes('pago amanhã') || combinedText.includes('pago amanha') || combinedText.includes('aceitou boleto') || combinedText.includes('envia o boleto') || combinedText.includes('envia o sms') || combinedText.includes('mandar o sms') || combinedText.includes('enviar o boleto')) {
-    if (combinedText.includes('pix')) return 'PROMESSA PIX';
-    if (combinedText.includes('cartão') || combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
-    return 'PROMESSA BOLETO';
-  }
-  if (combinedText.includes('desempregado') || combinedText.includes('desempregada') || combinedText.includes('sem emprego')) {
-    return 'NAO PAGARA - DESEMPREGADO';
-  }
-  if (combinedText.includes('cancelamento') || combinedText.includes('cancelar') || combinedText.includes('cancela')) {
-    return 'NÃO PAGARÁ - SOLICITOU O CANCELAMENTO ';
-  }
-  if (combinedText.includes('atendente') || combinedText.includes('humano') || combinedText.includes('pessoa') || combinedText.includes('humana') || combinedText.includes('falar com alguém') || combinedText.includes('falar com alguem')) {
-    return 'ROBO SOLICITA ATENDIMENTO HUMANO ';
-  }
-  if (combinedText.includes('não vai pagar') || combinedText.includes('não vou pagar') || combinedText.includes('não irei pagar') || combinedText.includes('financeiro') || combinedText.includes('sem dinheiro') || combinedText.includes('problema financeiro')) {
-    return 'NÃO PAGARÁ - PROBLEMA FINANCEIRO';
-  }
-  if (combinedText.includes('ligar mais tarde') || combinedText.includes('retornar') || combinedText.includes('outro horário') || combinedText.includes('outro horario') || combinedText.includes('ligue depois')) {
-    return 'RETORNO AGENDADO COM CLIENTE';
-  }
-
-  // 4. Quedas durante a chamada qualificada
-  if (duration >= 8 && (reason === 'customer-hung-up' || reason === 'assistant-hung-up')) {
-    return 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE';
-  }
-
-  // Fallback geral se atendido
-  return 'TENTATIVA - ATENDIMENTO NÃO TABULADO';
-}
+// A classificação de ocorrências agora é importada do utilitário compartilhado backend/utils/classifier.js
 
 const { handleRetellWebhook } = require('./services/retell.js');
 
@@ -743,20 +676,43 @@ app.post('/api/vapi-webhook', async (req, res) => {
     if (message?.type === 'tool-calls' || message?.type === 'function-call') {
       const call = message.call;
       const leadId = call?.metadata?.lead_id;
-      if (leadId) {
+      const toolCalls = message.toolCalls || message.tool_calls || [];
+
+      // Verificar se algum dos tool calls é para enviar o SMS
+      const hasSmsToolCall = toolCalls.some(tc => {
+        const funcName = tc.function?.name || tc.name;
+        return funcName === 'enviar_sms_linha_digitavel';
+      });
+
+      if (hasSmsToolCall && leadId) {
         const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
         if (lead) {
-          console.log(`[REAL-TIME SMS] Disparando Smart RCS em tempo real para o Lead #${leadId} durante a ligação!`);
+          console.log(`[REAL-TIME SMS] Disparando SMS em tempo real para o Lead #${leadId} durante a ligação!`);
           const { triggerN8NSmsWebhook } = require('./services/communication.js');
-          triggerN8NSmsWebhook(lead).catch(err => console.error('[REAL-TIME SMS ERROR]', err.message));
+          triggerN8NSmsWebhook(lead)
+            .then(smsResult => {
+              const smsStatus = smsResult.success ? 'completed' : 'failed';
+              const smsLog = smsResult.success ? `[SMS] Enviado em tempo real durante a ligação.` : smsResult.log;
+              run('UPDATE leads SET sms_status = ?, sms_log = ? WHERE id = ?', [smsStatus, smsLog, leadId]);
+            })
+            .catch(err => console.error('[REAL-TIME SMS ERROR]', err.message));
         }
       }
-      const toolCalls = message.toolCalls || message.tool_calls || [];
+
       return res.status(200).json({
-        results: toolCalls.map(tc => ({
-          toolCallId: tc.id,
-          result: 'SMS enviado com sucesso para o celular do cliente.'
-        }))
+        results: toolCalls.map(tc => {
+          const funcName = tc.function?.name || tc.name;
+          let resultMessage = 'Tool executada com sucesso.';
+          if (funcName === 'enviar_sms_linha_digitavel') {
+            resultMessage = 'SMS enviado com sucesso para o celular do cliente.';
+          } else if (funcName === 'voicemail_tool') {
+            resultMessage = 'Caixa postal detectada.';
+          }
+          return {
+            toolCallId: tc.id,
+            result: resultMessage
+          };
+        })
       });
     }
 
@@ -810,7 +766,12 @@ app.post('/api/vapi-webhook', async (req, res) => {
     const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${call?.duration || 0}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
     
     // Classificar ocorrência
-    const occurrence = classifyOccurrence(call);
+    const occurrence = classifyCallOccurrence({
+      endedReason: call?.endedReason || call?.ended_reason,
+      summary: call?.summary,
+      transcript: call?.transcript,
+      duration: call?.duration
+    });
     const transcriptText = call?.transcript || '';
 
     // Atualizar o lead com o status, log, ocorrência e transcrição da ligação
@@ -823,14 +784,6 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     // Regra de Negócio Precisa: Só envia SMS/E-mail se o cliente atendeu E formalizou/confirmou expressamente (CPC / Promessa)
     // Se o lead atendeu mas desligou rápido, caiu ou deu atendimento não tabulado, NÃO dispara SMS nem E-mail
-    const validCpcOccurrences = [
-      'PROMESSA BOLETO',
-      'PROMESSA PIX',
-      'PROMESSA CARTÃO',
-      'ALEGA PAGAMENTO - SEM COMPROVANTE',
-      'ROBO SOLICITA ATENDIMENTO HUMANO'
-    ];
-
     const isCpcConfirmed = callStatus === 'completed' && validCpcOccurrences.includes(occurrence);
 
     if (isCpcConfirmed) {
@@ -838,9 +791,17 @@ app.post('/api/vapi-webhook', async (req, res) => {
       if (lead) {
         const { triggerN8NSmsWebhook, sendLocawebEmail } = require('./services/communication.js');
         
-        // 1. Disparar Smart RCS
-        const smsResult = await triggerN8NSmsWebhook(lead);
-        const smsStatus = smsResult.success ? 'completed' : 'failed';
+        // 1. Disparar SMS se ainda não tiver sido enviado com sucesso em tempo real
+        let smsStatus = lead.sms_status;
+        let smsLogText = lead.sms_log;
+        
+        if (lead.sms_status !== 'completed') {
+          const smsResult = await triggerN8NSmsWebhook(lead);
+          smsStatus = smsResult.success ? 'completed' : 'failed';
+          smsLogText = smsResult.success ? `[SMS] Enviado com sucesso para o celular do titular.` : smsResult.log;
+        } else {
+          console.log(`[VAPI WEBHOOK] SMS do Lead #${leadId} já foi enviado em tempo real. Ignorando reenvio.`);
+        }
         
         // 2. Disparar E-mail se houver e-mail cadastrado ou se houver e-mail de teste (.env)
         let emailStatus = 'completed';
@@ -857,7 +818,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
            WHERE id = ?`,
           [
             smsStatus, 
-            smsResult.success ? `[Smart RCS] Enviado com sucesso para o celular do titular.` : smsResult.log, 
+            smsLogText, 
             emailStatus, 
             emailLog, 
             leadId

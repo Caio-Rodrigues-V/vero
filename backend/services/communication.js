@@ -239,7 +239,7 @@ async function triggerSmartRcs(lead) {
   // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
   const targetPhone = process.env.TEST_PHONE || lead.phone;
   if (process.env.TEST_PHONE) {
-    console.log(`[Smart RCS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+    console.log(`[SMS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
   }
 
   // Limpar telefone (apenas dígitos e com prefixo DDI 55)
@@ -249,7 +249,7 @@ async function triggerSmartRcs(lead) {
   }
 
   if (!lead.barcode) {
-    console.log(`[Smart RCS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
+    console.log(`[SMS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
     return {
       success: false,
       log: 'Cancelado: Lead não possui linha digitável.'
@@ -262,7 +262,7 @@ async function triggerSmartRcs(lead) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
   try {
-    console.log(`[Smart RCS] Enviando mensagem via agente '${senderAgent}' para ${cleanedPhone}...`);
+    console.log(`[SMS] Enviando mensagem via agente '${senderAgent}' para ${cleanedPhone}...`);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -286,27 +286,27 @@ async function triggerSmartRcs(lead) {
     const responseText = await response.text();
 
     if (!response.ok) {
-      throw new Error(`Erro API Smart RCS: ${response.status} - ${responseText}`);
+      throw new Error(`Erro API SMS: ${response.status} - ${responseText}`);
     }
 
     const data = JSON.parse(responseText);
 
     if (data.error) {
-      throw new Error(`Smart RCS recusou o envio: ${data.errorMessage}`);
+      throw new Error(`SMS recusou o envio: ${data.errorMessage}`);
     }
 
     const txId = data.transactionId || 'OK';
 
-    console.log(`[Smart RCS] Mensagem enviada com sucesso para ${cleanedPhone}. Transaction ID: ${txId}`);
+    console.log(`[SMS] Mensagem enviada com sucesso para ${cleanedPhone}. Transaction ID: ${txId}`);
     return {
       success: true,
-      log: `[Smart RCS] Enviado com sucesso. Transaction ID: ${txId}`
+      log: `[SMS] Enviado com sucesso. Transaction ID: ${txId}`
     };
   } catch (error) {
-    console.error(`[Smart RCS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
+    console.error(`[SMS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
     return {
       success: false,
-      log: `[Smart RCS] Falha no envio: ${error.message}`
+      log: `[SMS] Falha no envio: ${error.message}`
     };
   }
 }
