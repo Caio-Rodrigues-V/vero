@@ -260,6 +260,23 @@ export default function App() {
     }
   };
 
+  const handleSync = async () => {
+    fetchStats();
+    fetchCampaigns();
+    try {
+      await fetch(`${BACKEND_URL}/api/leads/sync-recordings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: selectedCampaignId })
+      });
+      if (selectedCampaignId) {
+        fetchLeads(selectedCampaignId, leadsPage);
+      }
+    } catch (e) {
+      console.error('Error syncing recordings:', e);
+    }
+  };
+
   const fetchLeads = async (campaignId: number, page: number, currentStatusFilter: string = statusFilter) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10&statusFilter=${currentStatusFilter}`);
@@ -536,7 +553,7 @@ export default function App() {
           </h2>
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => { fetchStats(); fetchCampaigns(); }}
+              onClick={handleSync}
               className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
             >
               <RefreshCw size={14} />

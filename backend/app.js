@@ -179,6 +179,10 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
     const totalLeadsRow = get(countQuery, params);
     const totalLeads = totalLeadsRow ? totalLeadsRow.total : 0;
 
+    // Disparar sincronização silenciosa em segundo plano para puxar gravações/transcrições da Vapi REST API
+    const { syncMissingVapiRecordings } = require('./services/vapi.js');
+    syncMissingVapiRecordings(id).catch(err => console.error('[VAPI SYNC WARN]', err.message));
+
     res.json({
       leads,
       pagination: {
@@ -188,6 +192,20 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
         totalPages: Math.ceil(totalLeads / limit)
       }
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Rota para forçar sincronização de gravações e transcrições com a API REST da Vapi (GET /call/{id})
+ */
+app.post('/api/leads/sync-recordings', async (req, res) => {
+  try {
+    const { campaignId } = req.body || {};
+    const { syncMissingVapiRecordings } = require('./services/vapi.js');
+    await syncMissingVapiRecordings(campaignId || null);
+    res.json({ success: true, message: 'Gravações e transcrições sincronizadas com a API da Vapi.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

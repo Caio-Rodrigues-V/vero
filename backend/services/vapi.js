@@ -307,4 +307,76 @@ async function makeVapiCall(lead) {
   }
 }
 
-module.exports = { makeVapiCall };
+/**
+ * Consulta a API REST da Vapi (GET /call/{callId}) para buscar detalhes, transcrição e áudio gravado
+ */
+async function fetchVapiCallDetails(callId) {
+  const apiKey = process.env.VAPI_API_KEY;
+  if (!apiKey || !callId) return null;
+
+  try {
+    const response = await fetch(`https://api.vapi.ai/call/${callId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      recordingUrl: data.recordingUrl || data.stereoRecordingUrl || data.artifact?.recordingUrl || data.artifact?.stereoRecordingUrl || null,
+      transcript: data.transcript || data.artifact?.transcript || null,
+      summary: data.summary || data.analysis?.summary || null,
+      endedReason: data.endedReason || null
+    };
+  } catch (err) {
+    console.error(`[VAPI FETCH CALL DETAILS ERROR] Call #${callId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Busca no banco todos os leads que possuem call_id mas ainda estão sem recording_url ou transcript,
+ * e consulta a API REST da Vapi para atualizar o banco em tempo real.
+ */
+async function syncMissingVapiRecordings(campaignId = null) {
+  const { all, run } = require('../db.js');
+  let query = `SELECT id, call_id FROM leads WHERE call_id IS NOT NULL AND call_id != '' AND (recording_url IS NULL OR transcript IS NULL OR transcript = '')`;
+  const params = [];
+
+  if (campaignId) {
+    query += ` AND campaign_id = ?`;
+    params.push(campaignId);
+  }
+
+  query += ` LIMIT 50`;
+
+  const leadsMissingData = all(query, params);
+
+  if (!leadsMissingData || leadsMissingData.length === 0) return;
+
+  console.log(`[VAPI RECORDING SYNC] Sincronizando áudios e transcrições da API Vapi para ${leadsMissingData.length} leads...`);
+
+  for (const lead of leadsMissingData) {
+    const details = await fetchVapiCallDetails(lead.call_id);
+    if (details) {
+      if (details.recordingUrl || details.transcript) {
+        run(
+          `UPDATE leads SET 
+            recording_url = COALESCE(?, recording_url), 
+            transcript = COALESCE(?, transcript) 
+           WHERE id = ?`,
+          [details.recordingUrl, details.transcript, lead.id]
+        );
+      }
+    }
+  }
+}
+
+module.exports = { 
+  makeVapiCall, 
+  fetchVapiCallDetails, 
+  syncMissingVapiRecordings 
+};
