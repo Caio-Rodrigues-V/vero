@@ -238,6 +238,9 @@ async function makeVapiCall(lead) {
       firstMessage: `Olá, eu falo com ${cleanName}, correto?`,
       firstMessageMode: 'assistant-speaks-first',
       serverUrl: webhookUrl,
+      artifactPlan: {
+        recordingEnabled: true
+      },
       voicemailDetection: {
         provider: 'vapi'
       },

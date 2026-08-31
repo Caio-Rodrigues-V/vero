@@ -773,7 +773,14 @@ app.post('/api/vapi-webhook', async (req, res) => {
       duration: call?.duration
     });
     const transcriptText = call?.transcript || '';
-    const recordingUrl = call?.recordingUrl || call?.stereoRecordingUrl || call?.artifact?.recordingUrl || call?.artifact?.stereoRecordingUrl || null;
+    const recordingUrl = 
+      call?.recordingUrl || 
+      call?.stereoRecordingUrl || 
+      call?.artifact?.recordingUrl || 
+      call?.artifact?.stereoRecordingUrl || 
+      message?.artifact?.recordingUrl || 
+      message?.recordingUrl || 
+      null;
 
     // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
     run(

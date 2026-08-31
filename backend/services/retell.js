@@ -135,7 +135,7 @@ async function handleRetellWebhook(eventData) {
       duration: durationSeconds
     });
 
-    const recordingUrl = call.recording_url || call.public_log_url || null;
+    const recordingUrl = call.recording_url || call.public_log_url || call.call_analysis?.recording_url || null;
 
     // Gravar no banco de dados local
     run(
