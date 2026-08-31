@@ -918,7 +918,10 @@ app.get('/api/leads/:id/audio', async (req, res) => {
     }
 
     if (!audioUrl) {
-      return res.status(404).send('Gravação de áudio não disponível para este lead.');
+      if (!lead.call_id) {
+        return res.status(404).send(`Lead #${id} (${lead.name}) não possui ID de chamada (call_id) registrado no banco.`);
+      }
+      return res.status(404).send(`A Vapi informou que não há gravação de áudio gerada para a chamada ${lead.call_id} do lead #${id} (${lead.name}).`);
     }
 
     const apiKey = process.env.VAPI_API_KEY;
