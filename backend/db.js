@@ -1,5 +1,30 @@
-const { DatabaseSync } = require('node:sqlite');
-const path = require('path');
+let DatabaseSync;
+try {
+  DatabaseSync = require('node:sqlite').DatabaseSync;
+} catch (e) {
+  try {
+    const BetterSqlite3 = require('better-sqlite3');
+    DatabaseSync = class {
+      constructor(path) {
+        this.db = new BetterSqlite3(path);
+      }
+      exec(sql) { return this.db.exec(sql); }
+      prepare(sql) {
+        const stmt = this.db.prepare(sql);
+        return {
+          run: (...args) => stmt.run(...args),
+          get: (...args) => stmt.get(...args),
+          all: (...args) => stmt.all(...args)
+        };
+      }
+    };
+  } catch (err2) {
+    console.error(`\n[ERRO NODE.JS] O módulo 'node:sqlite' é nativo do Node v22+ (Seu servidor está na versão ${process.version}).`);
+    console.error(`Para rodar no Node v20, utilize a flag --experimental-sqlite:\n`);
+    console.error(`   node --experimental-sqlite backend/scripts/manualSmsTrigger.js\n`);
+    throw e;
+  }
+}
 
 const dbPath = path.join(__dirname, 'vero_recovery.db');
 const db = new DatabaseSync(dbPath);
