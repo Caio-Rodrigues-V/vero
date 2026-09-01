@@ -311,21 +311,34 @@ async function makeVapiCall(lead) {
   try {
     console.log(`[VAPI CALL] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${finalPhoneNumberId} | Webhook: ${webhookUrl}`);
 
-    const response = await fetch('https://api.vapi.ai/call', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
-
+    // Disparar chamada com Retry para HTTP 429 (Rate limit)
+    let response;
+    let textResponse;
     let data;
-    const textResponse = await response.text();
-    try {
-      data = JSON.parse(textResponse);
-    } catch (e) {
-      data = { message: textResponse || `HTTP ${response.status}` };
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      response = await fetch('https://api.vapi.ai/call', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      textResponse = await response.text();
+      try {
+        data = JSON.parse(textResponse);
+      } catch (e) {
+        data = { message: textResponse || `HTTP ${response.status}` };
+      }
+
+      if (response && response.status === 429) {
+        console.log(`[VAPI CALL] HTTP 429 (Rate limit) para Lead #${lead.id} na tentativa ${attempt}. Aguardando ${2 * attempt}s...`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        continue;
+      }
+      break;
     }
 
     if (!response.ok || !data.id) {
