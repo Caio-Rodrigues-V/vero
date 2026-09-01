@@ -217,6 +217,29 @@ app.post('/api/leads/sync-recordings', async (req, res) => {
 /**
  * Exportar resultados da campanha em formato CSV (suporta filtro por ocorrência)
  */
+function formatOccurrenceLabel(occ, callLog) {
+  if (callLog && callLog.includes('customer-busy')) return 'ATENDEU E DESLIGOU / OCUPADO';
+  if (callLog && callLog.includes('customer-did-not-answer')) return 'NÃO ATENDEU';
+  if (!occ) return 'ATENDEU E DESLIGOU';
+  const upper = occ.toUpperCase();
+  if (upper.includes('PROMESSA BOLETO')) return 'PROMESSA BOLETO';
+  if (upper.includes('PROMESSA PIX')) return 'PROMESSA PIX';
+  if (upper.includes('PROMESSA CART')) return 'PROMESSA CARTÃO';
+  if (upper.includes('ALEGA PAGAMENTO')) return 'ALEGA PAGAMENTO';
+  if (upper.includes('DESEMPREGADO')) return 'DESEMPREGADO';
+  if (upper.includes('CANCELAMENTO')) return 'SOLICITOU CANCELAMENTO';
+  if (upper.includes('HUMANO') || upper.includes('ATENDENTE')) return 'SOLICITOU ATENDENTE';
+  if (upper.includes('FINANCEIRO')) return 'PROBLEMA FINANCEIRO';
+  if (upper.includes('RETORNO')) return 'SOLICITOU RETORNO';
+  if (upper.includes('FALECIDO')) return 'CLIENTE FALECIDO';
+  if (upper.includes('DESCONHECIDO')) return 'NÚMERO ERRADO';
+  if (upper.includes('MAQUINA') || upper.includes('VOICEMAIL')) return 'CAIXA POSTAL';
+  if (upper.includes('OCUPADO')) return 'LINHA OCUPADA';
+  if (upper.includes('NÃO ATENDE')) return 'NÃO ATENDEU';
+  if (upper.includes('DESLIGOU') || upper.includes('MUDA')) return 'ATENDEU E DESLIGOU';
+  return occ;
+}
+
 app.get('/api/campaigns/:id/export', (req, res) => {
   const { id } = req.params;
   const { occurrence, filter, callStatus } = req.query;
@@ -238,12 +261,13 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       whereClause += " AND call_status = 'completed'";
     }
 
-    const query = `SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log, email_status, email_log FROM leads ${whereClause}`;
+    const query = `SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_log FROM leads ${whereClause}`;
     const leads = all(query, params);
 
-    let csvContent = '\uFEFFNome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS,Status Email,Log Email\r\n';
+    let csvContent = '\uFEFFNome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Contrato,Status Ligacao\r\n';
     
     for (const lead of leads) {
+      const cleanOccurrence = formatOccurrenceLabel(lead.occurrence, lead.call_log);
       const row = [
         `"${(lead.name || '').replace(/"/g, '""')}"`,
         `"${lead.phone}"`,
@@ -253,13 +277,7 @@ app.get('/api/campaigns/:id/export', (req, res) => {
         `"${lead.barcode || ''}"`,
         lead.dias_atraso || 0,
         `"${lead.status_internet || ''}"`,
-        `"${lead.occurrence || 'TENTATIVA - NÃO TABULADO'}"`,
-        `"${lead.call_status}"`,
-        `"${(lead.call_log || '').replace(/"/g, '""')}"`,
-        `"${lead.sms_status}"`,
-        `"${(lead.sms_log || '').replace(/"/g, '""')}"`,
-        `"${lead.email_status}"`,
-        `"${(lead.email_log || '').replace(/"/g, '""')}"`
+        `"${cleanOccurrence}"`
       ];
       csvContent += row.join(',') + '\r\n';
     }
