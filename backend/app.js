@@ -344,9 +344,16 @@ app.post('/api/campaigns/:id/start', (req, res) => {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    // Marca campanha como processing e descongela chamadas presas em calling
+    // Se não houver nenhum lead pendente, reenfileira os leads que falharam ou travaram para continuar o lote completo
+    const pendingCount = get("SELECT COUNT(id) as count FROM leads WHERE campaign_id = ? AND call_status = 'pending'", [id]);
+    if (!pendingCount || pendingCount.count === 0) {
+      console.log(`[SERVER START] Nenhum lead pendente encontrado para a campanha #${id}. Reenfileirando leads não atendidos/falhados para continuar...`);
+      run("UPDATE leads SET call_status = 'pending', call_log = 'Reenfileirado para discagem' WHERE campaign_id = ? AND (call_status = 'failed' OR call_status = 'calling')", [id]);
+    } else {
+      run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [id]);
+    }
+
     run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
-    run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [id]);
 
     const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
     triggerCampaignProcessor(Number(id));
