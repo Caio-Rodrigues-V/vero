@@ -74,6 +74,40 @@ async function processCampaign(campaignId, force = false) {
         break;
       }
 
+      // Trava de Quarentena de 3 Dias: Se este número recebeu SMS ou teve CPC nos últimos 3 dias, pula a discagem
+      const cleanPhone = String(lead.phone).replace(/\D/g, '');
+      const recentContact = get(
+        `SELECT id FROM leads 
+         WHERE (phone = ? OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') = ?)
+           AND id != ? 
+           AND (sms_status = 'completed' OR (call_status = 'completed' AND occurrence IS NOT NULL AND occurrence NOT LIKE 'TENTATIVA - %')) 
+           AND updated_at >= datetime('now', '-3 days')
+         LIMIT 1`,
+        [lead.phone, cleanPhone, lead.id]
+      );
+
+      if (recentContact) {
+        console.log(`[EXECUTOR QUARENTENA] Lead #${lead.id} (${lead.phone} - ${lead.name}) foi contatado nos últimos 3 dias (Lead #${recentContact.id}). Ignorando.`);
+        run(
+          `UPDATE leads 
+           SET call_status = 'failed', 
+               call_log = 'Ignorado: Cliente contatado com sucesso nos últimos 3 dias (Quarentena 3d)',
+               sms_status = 'failed',
+               sms_log = 'Ignorado: Quarentena de 3d ativa.',
+               email_status = 'failed',
+               email_log = 'Ignorado: Quarentena de 3d ativa.'
+           WHERE id = ?`,
+          [lead.id]
+        );
+        run(
+          `UPDATE campaigns 
+           SET processed_leads = processed_leads + 1, failed_calls = failed_calls + 1 
+           WHERE id = ?`,
+          [campaignId]
+        );
+        continue;
+      }
+
       // 4. Marcar o lead como 'calling' no banco temporariamente
       run(
         `UPDATE leads 
