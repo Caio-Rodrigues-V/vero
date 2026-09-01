@@ -1470,12 +1470,12 @@ export default function App() {
               {(selectedTranscriptLead.recording_url || selectedTranscriptLead.call_id) && (
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gravação do Áudio da Chamada</span>
-                  <audio controls src={`${BACKEND_URL}/api/leads/${selectedTranscriptLead.id}/audio`} className="w-full h-8" />
+                  <audio controls src={`${BACKEND_URL}/api/leads/${selectedTranscriptLead.id}/audio?t=${Date.now()}`} className="w-full h-8" />
                 </div>
               )}
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição Bruta da Ligação</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição / Histórico da Ligação</span>
               <div className="whitespace-pre-wrap font-mono text-slate-700 leading-relaxed bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                {selectedTranscriptLead.transcript || 'Nenhuma transcrição gravada para esta chamada.'}
+                {selectedTranscriptLead.transcript || selectedTranscriptLead.call_log || 'Nenhuma transcrição ou registro gravado para esta chamada.'}
               </div>
             </div>
 
