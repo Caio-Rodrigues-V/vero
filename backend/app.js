@@ -808,34 +808,29 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${endedReason}`);
 
-    // Determinar se a chamada foi atendida / conectada com sucesso
-    const successReasons = [
-      'assistant-completed-task', 
-      'customer-ended-call', 
-      'assistant-ended-call', 
-      'customer-hung-up', 
-      'customer',
-      'assistant-hung-up',
-      'silence-timed-out',
-      'silence',
-      'assistant-said-end-call-phrase',
-      'normal-clearing',
-      'call-ended-by-assistant'
-    ];
-    
+    // Determinar estritamente se a chamada foi efetivamente atendida (Duração > 0s ou Transcrição)
     const lowerReason = String(endedReason || '').toLowerCase();
-    const isSuccessReason = successReasons.includes(endedReason) || 
-      lowerReason.includes('customer') || 
-      lowerReason.includes('silence') || 
-      lowerReason.includes('completed') || 
-      lowerReason.includes('assistant');
+    const failedReasons = [
+      'customer-did-not-answer',
+      'customer-busy',
+      'no-answer',
+      'busy',
+      'user_busy',
+      'dial_failed',
+      'pipeline-error',
+      'error-sip-outbound-call-failed-to-connect',
+      'error-providerfault-outbound-sip-408-request-timeout'
+    ];
 
-    const hasTranscript = Boolean(call?.transcript && call.transcript.trim().length > 0);
-    const hasStarted = Boolean(call?.startedAt);
-    const hasDuration = Number(call?.duration || 0) > 0;
-    const hasMessages = Array.isArray(call?.messages) && call.messages.length > 0;
+    const isFailedReason = failedReasons.some(r => lowerReason.includes(r));
+    const duration = Number(call?.duration || 0);
+    const transcriptTextCheck = message?.transcript || call?.transcript || message?.artifact?.transcript || call?.artifact?.transcript || '';
 
-    const isSuccess = isSuccessReason || hasTranscript || hasStarted || hasDuration || hasMessages;
+    const isSuccess = !isFailedReason && (
+      duration > 0 || 
+      Boolean(transcriptTextCheck && transcriptTextCheck.trim().length > 0)
+    );
+
     const callStatus = isSuccess ? 'completed' : 'failed';
     
     const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${call?.duration || 0}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
