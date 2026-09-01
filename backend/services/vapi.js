@@ -270,17 +270,13 @@ async function makeVapiCall(lead) {
     return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
   }).join(' ') || 'Cliente';
 
-  // Montar o corpo da requisição incluindo sipHeaders e serverUrl para suporte total a BYO SIP Trunk / New Voice
+  // Montar o corpo da requisição incluindo serverUrl em assistantOverrides para garantia do Webhook VAPI
   const body = {
     assistantId: finalAssistantId,
     phoneNumberId: finalPhoneNumberId,
     customer: {
       number: phoneE164,
       name: shortName
-    },
-    sipHeaders: {
-      'P-Asserted-Identity': `<sip:+5521989510033@sip.vapi.ai>`,
-      'P-Preferred-Identity': `<sip:+5521989510033@sip.vapi.ai>`
     },
     metadata: {
       lead_id: lead.id,
