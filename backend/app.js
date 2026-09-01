@@ -454,17 +454,33 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
           );
           restoredCount++;
 
-          // Disparar SMS/RCS automático via n8n para a Jeane e qualquer chamada atendida
-          const updatedLead = get('SELECT * FROM leads WHERE id = ?', [targetLead.id]);
-          if (updatedLead && updatedLead.sms_status !== 'completed') {
-            const { triggerN8NSmsWebhook } = require('./services/communication.js');
-            triggerN8NSmsWebhook(updatedLead)
-              .then(smsResult => {
-                const smsStatus = smsResult.success ? 'completed' : 'failed';
-                const smsLog = smsResult.success ? `[SMS] Enviado com sucesso via n8n/Unipix.` : smsResult.log;
-                run('UPDATE leads SET sms_status = ?, sms_log = ? WHERE id = ?', [smsStatus, smsLog, targetLead.id]);
-              })
-              .catch(e => {});
+          // Regra Estrita de Envio de SMS: SÓ ENVIA SE O CLIENTE RESPONDER COM CPC AFIRMATIVO OU SE A TOOL DE SMS FOR ACIONADA
+          const transcriptText = transcript || '';
+          const customerSpeech = normalizeText(extractCustomerSpeech(transcriptText));
+          const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|alô|alo|isso|confirmo|exato|esta|é ela|e ela|é ele|e ele|eu mesma|eu mesmo|palestine|posso ajudar)\b/i.test(customerSpeech);
+          
+          const hasSmsToolCallInMessages = Array.isArray(c.artifact?.messages) && c.artifact.messages.some(m => {
+            const funcName = m.toolCalls?.[0]?.function?.name || m.name || '';
+            return String(funcName).toLowerCase().includes('sms');
+          });
+
+          const shouldSendSms = (isAffirmativeCpc && customerSpeech.trim().length > 0) || hasSmsToolCallInMessages;
+
+          if (shouldSendSms) {
+            const lead = get('SELECT * FROM leads WHERE id = ?', [targetLead.id]);
+            if (lead && lead.sms_status !== 'completed') {
+              console.log(`[SMS TRIGGER] Disparando SMS para Lead #${targetLead.id} (${lead.phone}) por confirmação de CPC...`);
+              const { triggerN8NSmsWebhook } = require('./services/communication.js');
+              triggerN8NSmsWebhook(lead)
+                .then(smsResult => {
+                  const smsStatus = smsResult.success ? 'completed' : 'failed';
+                  const smsLog = smsResult.success ? `[SMS] Enviado com sucesso via n8n/Unipix.` : smsResult.log;
+                  run('UPDATE leads SET sms_status = ?, sms_log = ? WHERE id = ?', [smsStatus, smsLog, targetLead.id]);
+                })
+                .catch(err => console.error('[SMS TRIGGER ERROR]', err.message));
+            }
+          } else {
+            run("UPDATE leads SET sms_status = 'failed', sms_log = 'Cancelado: Cliente não confirmou a identidade (CPC).' WHERE id = ? AND (sms_status IS NULL OR sms_status = 'pending')", [targetLead.id]);
           }
         }
       }
@@ -975,11 +991,11 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [callStatus, logText, occurrence, transcriptText, recordingUrl, leadId]
     );
 
-    // Regra de Negócio: Envia SMS se o cliente confirmou ser a pessoa certa (CPC: "Sim", "Sou eu", "Correto", "Pode falar", etc) ou ocorrência qualificada
-    const customerSpeech = transcriptText ? transcriptText.toLowerCase() : '';
-    const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|e ele|e ela|isso|confirmado|falo|alô|alo)\b/i.test(customerSpeech);
+    // Regra de Negócio: Envia SMS APENAS se a fala do CLIENTE (excluindo a pergunta do assistente) contiver confirmação afirmativa
+    const customerSpeechOnly = normalizeText(extractCustomerSpeech(transcriptText));
+    const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|alô|alo|isso|confirmo|exato|esta|é ela|e ela|é ele|e ele|eu mesma|eu mesmo|palestine|posso ajudar)\b/i.test(customerSpeechOnly);
     const isCpcConfirmed = (callStatus === 'completed' || Number(call?.duration || 0) > 0) && 
-      (validCpcOccurrences.includes(occurrence) || isAffirmativeCpc);
+      (validCpcOccurrences.includes(occurrence) || (isAffirmativeCpc && customerSpeechOnly.trim().length > 0));
 
     if (isCpcConfirmed) {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
