@@ -381,6 +381,23 @@ app.post('/api/campaigns/:id/retry-failed', (req, res) => {
 });
 
 /**
+ * Destravar Campanha Instantaneamente (Reenfileira todos os leads não atendidos)
+ */
+app.post('/api/campaigns/:id/force-unlock', (req, res) => {
+  const { id } = req.params;
+  try {
+    run("UPDATE leads SET call_status = 'pending', call_log = 'Destravado para discagem continuada' WHERE campaign_id = ? AND (call_status IS NULL OR call_status != 'completed')", [id]);
+    run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
+
+    const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
+    triggerCampaignProcessor(Number(id));
+    res.json({ success: true, message: 'Campanha destravada com sucesso! Discagem retomada a todo vapor.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Rota para ressincronizar todas as chamadas atendidas da Vapi diretamente REST API
  */
 app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
@@ -1302,15 +1319,15 @@ app.get('*', (req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
   
-  // Auto-retomar campanhas ativas quando o servidor é reiniciado (pm2 restart all)
+  // Auto-retomar e destravar campanhas ativas quando o servidor é reiniciado (pm2 restart all)
   try {
-    const activeCampaigns = all("SELECT id FROM campaigns WHERE status = 'processing'");
+    const activeCampaigns = all("SELECT id FROM campaigns WHERE status IN ('processing', 'paused') ORDER BY id DESC LIMIT 1");
     if (activeCampaigns && activeCampaigns.length > 0) {
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
-      console.log(`[AUTO-RESUME] Encontradas ${activeCampaigns.length} campanhas em processamento. Retomando discador automaticamente...`);
-      for (const c of activeCampaigns) {
-        triggerCampaignProcessor(c.id);
-      }
+      console.log(`[AUTO-RESUME] Destravando e retomando discagem da campanha #${activeCampaigns[0].id} automaticamente...`);
+      run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND (call_status IS NULL OR call_status != 'completed')", [activeCampaigns[0].id]);
+      run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [activeCampaigns[0].id]);
+      triggerCampaignProcessor(activeCampaigns[0].id);
     }
   } catch (e) {
     console.error('[AUTO-RESUME WARN]', e.message);

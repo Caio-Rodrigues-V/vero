@@ -18,7 +18,8 @@ import {
   MessageSquare,
   Volume2,
   X,
-  Filter
+  Filter,
+  Zap
 } from 'lucide-react';
 
 // Interfaces para os tipos de dados
@@ -413,6 +414,25 @@ export default function App() {
       }
     } catch (err: any) {
       alert('Servidor ocupado. Tente novamente em instantes.');
+    }
+  };
+
+  const handleForceUnlock = async (id: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/force-unlock`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.message || 'Campanha destravada com sucesso! Discagem retomada.');
+        fetchCampaigns();
+        fetchStats();
+        if (selectedCampaignId) fetchLeads(selectedCampaignId, leadsPage, statusFilter, searchTerm);
+      } else {
+        alert('Erro ao destravar campanha');
+      }
+    } catch (err: any) {
+      alert(`Falha na conexão: ${err.message}`);
     }
   };
 
@@ -1135,6 +1155,14 @@ export default function App() {
                                 Pausar
                               </button>
                             )}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleForceUnlock(c.id); }}
+                              className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 transition flex items-center gap-1 shadow-sm"
+                              title="Destravar e retomar discagem de todos os leads não atendidos da lista"
+                            >
+                              <Zap size={12} />
+                              Destravar
+                            </button>
                             <button 
                               onClick={(e) => { e.stopPropagation(); handleResyncVapi(c.id); }}
                               className="px-2 py-1.5 border border-purple-200 text-purple-700 bg-purple-50 rounded-md text-xs font-semibold hover:bg-purple-100 transition flex items-center gap-1"
