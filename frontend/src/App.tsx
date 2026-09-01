@@ -1433,13 +1433,23 @@ export default function App() {
                         Criada em {new Date(c.created_at).toLocaleString('pt-BR')} • {c.total_leads} leads processados
                       </p>
                     </div>
-                    <a 
-                      href={`${BACKEND_URL}/api/campaigns/${c.id}/export?occurrence=${exportOccurrenceFilter !== 'all' ? encodeURIComponent(exportOccurrenceFilter) : ''}`}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-vero-magenta text-white text-xs font-semibold rounded-lg hover:bg-rose-700 transition"
-                    >
-                      <Download size={14} />
-                      Exportar CSV
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a 
+                        href={`${BACKEND_URL}/api/campaigns/${c.id}/export?filter=answered`}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm"
+                        title="Baixar lista formatada para Excel com os leads efetivamente atendidos para envio no Gmail"
+                      >
+                        <Download size={14} />
+                        📥 Apenas Atendidas ({c.successful_calls})
+                      </a>
+                      <a 
+                        href={`${BACKEND_URL}/api/campaigns/${c.id}/export?occurrence=${exportOccurrenceFilter !== 'all' ? encodeURIComponent(exportOccurrenceFilter) : ''}`}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-vero-magenta text-white text-xs font-semibold rounded-lg hover:bg-rose-700 transition"
+                      >
+                        <Download size={14} />
+                        Exportar Todos
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>

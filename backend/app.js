@@ -219,26 +219,33 @@ app.post('/api/leads/sync-recordings', async (req, res) => {
  */
 app.get('/api/campaigns/:id/export', (req, res) => {
   const { id } = req.params;
-  const { occurrence } = req.query;
+  const { occurrence, filter, callStatus } = req.query;
   try {
     const campaign = get('SELECT name FROM campaigns WHERE id = ?', [id]);
     if (!campaign) {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    let query = 'SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log, email_status, email_log FROM leads WHERE campaign_id = ?';
+    let whereClause = 'WHERE campaign_id = ?';
     const params = [id];
+
     if (occurrence && occurrence !== 'all') {
-      query += ' AND occurrence = ?';
+      whereClause += ' AND occurrence = ?';
       params.push(occurrence);
     }
+
+    if (filter === 'answered' || callStatus === 'completed') {
+      whereClause += " AND call_status = 'completed'";
+    }
+
+    const query = `SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log, email_status, email_log FROM leads ${whereClause}`;
     const leads = all(query, params);
 
-    let csvContent = 'Nome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS,Status Email,Log Email\r\n';
+    let csvContent = '\uFEFFNome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Internet,Ocorrencia,Status Chamada,Log Chamada,Status SMS,Log SMS,Status Email,Log Email\r\n';
     
     for (const lead of leads) {
       const row = [
-        `"${lead.name.replace(/"/g, '""')}"`,
+        `"${(lead.name || '').replace(/"/g, '""')}"`,
         `"${lead.phone}"`,
         `"${lead.email || ''}"`,
         lead.debt_value,
@@ -257,10 +264,11 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       csvContent += row.join(',') + '\r\n';
     }
 
-    const filename = `resultado_campanha_${id}.csv`;
+    const isAnsweredOnly = filter === 'answered' || callStatus === 'completed';
+    const filename = isAnsweredOnly ? `atendidos_953_campanha_${id}.csv` : `resultado_campanha_${id}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-    res.send(Buffer.from('\uFEFF' + csvContent, 'utf-8')); // Adiciona BOM para abrir corretamente no Excel
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(Buffer.from(csvContent, 'utf-8'));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
