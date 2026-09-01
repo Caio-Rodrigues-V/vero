@@ -962,16 +962,33 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     const call = message.call;
     const metadata = call?.metadata;
-    const leadId = metadata?.lead_id;
-    const campaignId = metadata?.campaign_id;
+    let leadId = metadata?.lead_id;
+    let targetLead = null;
 
-    if (!leadId) {
-      return res.json({ received: true, status: 'missing_lead_id_in_metadata' });
+    if (leadId) {
+      targetLead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
     }
+
+    if (!targetLead && call?.id) {
+      targetLead = get('SELECT * FROM leads WHERE call_id = ?', [call.id]);
+    }
+
+    if (!targetLead && call?.customer?.number) {
+      const phoneDigits = call.customer.number.replace(/\D/g, '').slice(-8);
+      targetLead = get('SELECT * FROM leads WHERE phone LIKE ? ORDER BY id DESC LIMIT 1', [`%${phoneDigits}%`]);
+    }
+
+    if (!targetLead) {
+      console.log(`[VAPI WEBHOOK] Lead não encontrado no banco para a chamada ${call?.id} (${call?.customer?.number}).`);
+      return res.json({ received: true, status: 'lead_not_found' });
+    }
+
+    leadId = targetLead.id;
+    const campaignId = targetLead.campaign_id || metadata?.campaign_id;
 
     const endedReason = call?.endedReason || call?.ended_reason || 'erro_sintetizacao_voz';
 
-    console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${endedReason}`);
+    console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId} (Campanha #${campaignId}). Motivo: ${endedReason}`);
 
     // Regra do Faraó: Classificar SILENCE e CUSTOMER (sem ser did-not-answer ou busy) como ATENDIDAS (completed/verde)
     const lowerReason = String(endedReason || '').toLowerCase();
