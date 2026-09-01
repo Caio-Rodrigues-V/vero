@@ -4,6 +4,9 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config();
 
+const { get, run, all } = require('../db.js');
+const { SYSTEM_PROMPT_TEMPLATE, FIRST_MESSAGE_TEMPLATE } = require('../config/agentPrompt.js');
+
 /**
  * Formata o valor de débito para Real (R$)
  */
@@ -317,7 +320,13 @@ async function makeVapiCall(lead) {
       body: JSON.stringify(body)
     });
 
-    const data = await response.json();
+    let data;
+    const textResponse = await response.text();
+    try {
+      data = JSON.parse(textResponse);
+    } catch (e) {
+      data = { message: textResponse || `HTTP ${response.status}` };
+    }
 
     if (!response.ok || !data.id) {
       const errMessage = data.message || data.error || (data.message?.message) || JSON.stringify(data);
