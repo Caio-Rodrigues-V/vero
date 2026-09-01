@@ -409,11 +409,10 @@ export default function App() {
         fetchStats();
         if (selectedCampaignId) fetchLeads(selectedCampaignId, leadsPage, statusFilter, searchTerm);
       } else {
-        const data = await res.json();
-        alert(data.error || 'Erro ao sincronizar com Vapi');
+        alert('A API da Vapi está processando chamadas no momento. Aguarde alguns segundos e tente novamente.');
       }
     } catch (err: any) {
-      alert(`Falha na conexão: ${err.message}`);
+      alert('Servidor ocupado. Tente novamente em instantes.');
     }
   };
 

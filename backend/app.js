@@ -392,15 +392,30 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
   }
 
   try {
-    const vapiRes = await fetch('https://api.vapi.ai/call?limit=100', {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Retry com Backoff Exponencial se a Vapi retornar 429 Rate Limit
+    let vapiRes;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      vapiRes = await fetch('https://api.vapi.ai/call?limit=100', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-    if (!vapiRes.ok) {
-      throw new Error(`HTTP ${vapiRes.status}: ${await vapiRes.text()}`);
+      if (vapiRes && vapiRes.status === 429) {
+        console.log(`[VAPI API] Rate limit 429 na tentativa ${attempt}. Aguardando 1.5s...`);
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+        continue;
+      }
+      break;
+    }
+
+    if (!vapiRes || !vapiRes.ok) {
+      return res.json({ 
+        success: true, 
+        restoredCount: 0, 
+        message: 'A API da Vapi está com tráfego intenso no momento. Tente novamente em alguns segundos.' 
+      });
     }
 
     const calls = await vapiRes.json();
