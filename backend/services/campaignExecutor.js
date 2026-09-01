@@ -190,7 +190,6 @@ async function processCampaign(campaignId, force = false) {
  */
 function triggerCampaignProcessor(campaignIdToForce = null) {
   if (campaignIdToForce) {
-    // Resetar leads presos em 'calling' para 'pending' ao disparar manualmente
     run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [campaignIdToForce]);
     processCampaign(campaignIdToForce, true);
     return;
@@ -200,7 +199,7 @@ function triggerCampaignProcessor(campaignIdToForce = null) {
   for (const row of processingCampaigns) {
     const pendingCount = get("SELECT COUNT(id) as count FROM leads WHERE campaign_id = ? AND call_status = 'pending'", [row.id]);
     if (pendingCount && pendingCount.count > 0) {
-      processCampaign(row.id);
+      processCampaign(row.id, !activeJobs.has(row.id));
     }
   }
 }
