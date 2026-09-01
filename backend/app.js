@@ -419,7 +419,8 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
       const recordingUrl = c.recordingUrl || c.artifact?.recordingUrl || null;
 
       const lowerReason = endedReason.toLowerCase();
-      const isExplicitFailed = lowerReason.includes('customer-did-not-answer') || 
+      const isExplicitFailed = lowerReason.includes('voicemail') ||
+                               lowerReason.includes('customer-did-not-answer') || 
                                lowerReason.includes('customer-busy') || 
                                lowerReason.includes('no-answer') || 
                                lowerReason.includes('busy') || 
@@ -927,7 +928,8 @@ app.post('/api/vapi-webhook', async (req, res) => {
       call?.artifact?.recordingUrl || 
       null;
 
-    const isExplicitFailed = lowerReason.includes('customer-did-not-answer') || 
+    const isExplicitFailed = lowerReason.includes('voicemail') ||
+                             lowerReason.includes('customer-did-not-answer') || 
                              lowerReason.includes('customer-busy') || 
                              lowerReason.includes('no-answer') || 
                              lowerReason.includes('busy') || 
