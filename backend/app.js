@@ -151,6 +151,7 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 50;
   const offset = (page - 1) * limit;
+  const statusFilter = req.query.statusFilter || 'all';
   const search = (req.query.search || '').trim();
 
   try {
