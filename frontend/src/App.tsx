@@ -1126,9 +1126,10 @@ export default function App() {
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleStartCampaign(c.id); }}
                                 className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700 transition flex items-center gap-1"
+                                title="Continuar discando os leads pendentes de onde parou"
                               >
                                 <Play size={12} />
-                                {c.status === 'paused' ? 'Retomar' : 'Disparar'}
+                                {c.status === 'pending' ? 'Disparar' : 'Continuar'}
                               </button>
                             )}
                             {c.status === 'processing' && (
