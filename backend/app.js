@@ -1174,4 +1174,18 @@ app.get('*', (req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
+  
+  // Auto-retomar campanhas ativas quando o servidor é reiniciado (pm2 restart all)
+  try {
+    const activeCampaigns = all("SELECT id FROM campaigns WHERE status = 'processing'");
+    if (activeCampaigns && activeCampaigns.length > 0) {
+      const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
+      console.log(`[AUTO-RESUME] Encontradas ${activeCampaigns.length} campanhas em processamento. Retomando discador automaticamente...`);
+      for (const c of activeCampaigns) {
+        triggerCampaignProcessor(c.id);
+      }
+    }
+  } catch (e) {
+    console.error('[AUTO-RESUME WARN]', e.message);
+  }
 });
