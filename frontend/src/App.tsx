@@ -383,6 +383,23 @@ export default function App() {
     }
   };
 
+  const handleRetryFailedCampaign = async (id: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/retry-failed`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.message || 'Leads reenfileirados para discagem com sucesso!');
+        fetchCampaigns();
+        fetchStats();
+        if (selectedCampaignId) fetchLeads(selectedCampaignId, 1);
+      }
+    } catch (err) {
+      console.error('Error retrying campaign:', err);
+    }
+  };
+
   const handleCancelCampaign = async (id: number) => {
     if (!confirm('Deseja realmente cancelar/pausar esta campanha?')) return;
     try {
@@ -757,13 +774,20 @@ export default function App() {
                             <div className="flex gap-2">
                               <button 
                                 onClick={() => c.status === 'processing' ? handleCancelCampaign(c.id) : handleStartCampaign(c.id)}
-                                className={`w-full py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+                                className={`w-1/2 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
                                   c.status === 'processing' 
                                     ? 'border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold' 
                                     : 'bg-green-600 text-white hover:bg-green-700 font-bold'
                                 }`}
                               >
-                                {c.status === 'processing' ? '⏸️ Pausar Disparos' : '▶️ Retomar Disparos'}
+                                {c.status === 'processing' ? '⏸️ Pausar' : '▶️ Disparar'}
+                              </button>
+                              <button 
+                                onClick={() => handleRetryFailedCampaign(c.id)}
+                                className="w-1/2 py-2 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700 transition flex items-center justify-center gap-1"
+                                title="Resetar e rediscar chamadas não atendidas ou com falhas nesta campanha"
+                              >
+                                🔄 Rediscar
                               </button>
                             </div>
                           </div>
