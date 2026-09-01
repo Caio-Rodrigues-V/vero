@@ -401,6 +401,26 @@ export default function App() {
     }
   };
 
+  const handleResyncVapi = async (id: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/resync-vapi`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.message || 'Ressincronização com Vapi concluída com sucesso!');
+        fetchCampaigns();
+        fetchStats();
+        if (selectedCampaignId) fetchLeads(selectedCampaignId, leadsPage, statusFilter, searchTerm);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Erro ao sincronizar com Vapi');
+      }
+    } catch (err: any) {
+      alert(`Falha na conexão: ${err.message}`);
+    }
+  };
+
   const handleCancelCampaign = async (id: number) => {
     if (!confirm('Deseja realmente cancelar/pausar esta campanha?')) return;
     try {
@@ -1119,6 +1139,14 @@ export default function App() {
                                 Pausar
                               </button>
                             )}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleResyncVapi(c.id); }}
+                              className="px-2 py-1.5 border border-purple-200 text-purple-700 bg-purple-50 rounded-md text-xs font-semibold hover:bg-purple-100 transition flex items-center gap-1"
+                              title="Sincronizar chamadas com a API Vapi em tempo real"
+                            >
+                              <RefreshCw size={12} />
+                              Sincronizar Vapi
+                            </button>
                             <button 
                               onClick={(e) => { e.stopPropagation(); handleDeleteCampaign(c.id); }}
                               className="p-1.5 text-slate-400 hover:text-red-500 transition hover:bg-red-50 rounded"

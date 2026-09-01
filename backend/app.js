@@ -374,6 +374,90 @@ app.post('/api/campaigns/:id/retry-failed', (req, res) => {
 });
 
 /**
+ * Rota para ressincronizar todas as chamadas atendidas da Vapi diretamente REST API
+ */
+app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
+  const { id } = req.params;
+  const apiKey = process.env.VAPI_API_KEY;
+
+  if (!apiKey) {
+    return res.status(400).json({ error: 'VAPI_API_KEY não configurada no servidor.' });
+  }
+
+  try {
+    const vapiRes = await fetch('https://api.vapi.ai/call?limit=100', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!vapiRes.ok) {
+      throw new Error(`HTTP ${vapiRes.status}: ${await vapiRes.text()}`);
+    }
+
+    const calls = await vapiRes.json();
+    const successReasons = [
+      'assistant-completed-task', 
+      'customer-ended-call', 
+      'assistant-ended-call', 
+      'customer-hung-up', 
+      'silence-timed-out',
+      'silence',
+      'assistant-said-end-call-phrase',
+      'normal-clearing',
+      'call-ended-by-assistant'
+    ];
+
+    let restoredCount = 0;
+
+    for (const c of calls) {
+      const callId = c.id;
+      const endedReason = c.endedReason || '';
+      const dur = c.duration || (c.endedAt ? Math.round((new Date(c.endedAt) - new Date(c.startedAt || c.createdAt)) / 1000) : 0);
+      const transcript = c.transcript || c.artifact?.transcript || '';
+      const recordingUrl = c.recordingUrl || c.artifact?.recordingUrl || null;
+
+      const lowerReason = endedReason.toLowerCase();
+      const isSuccessReason = successReasons.some(r => lowerReason.includes(r));
+      const hasTranscript = Boolean(transcript && transcript.trim().length > 0);
+      const isAnswered = (dur > 0 || hasTranscript) && 
+                        !lowerReason.includes('customer-did-not-answer') && 
+                        !lowerReason.includes('customer-busy') && 
+                        !lowerReason.includes('failed-to-connect');
+
+      if (isAnswered) {
+        const phoneDigits = c.customer?.number ? c.customer.number.replace(/\D/g, '').slice(-8) : 'NOMATCH';
+        const targetLead = get(
+          'SELECT id FROM leads WHERE call_id = ? OR (phone LIKE ? AND campaign_id = ?)', 
+          [callId, `%${phoneDigits}%`, Number(id)]
+        );
+
+        if (targetLead) {
+          run(
+            `UPDATE leads SET 
+              call_id = ?,
+              call_status = 'completed', 
+              call_duration = ?, 
+              transcript = COALESCE(?, transcript), 
+              recording_url = COALESCE(?, recording_url),
+              call_log = ?
+             WHERE id = ?`,
+            [callId, dur, transcript, recordingUrl, `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${dur}s.`, targetLead.id]
+          );
+          restoredCount++;
+        }
+      }
+    }
+
+    updateCampaignStats(Number(id));
+    res.json({ success: true, restoredCount, message: `Ressincronização concluída! ${restoredCount} chamadas atendidas restauradas.` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Recalcular estatísticas e alinhar envios reais de SMS da campanha ativa
  */
 app.post('/api/admin/recalculate-stats', (req, res) => {
@@ -808,22 +892,22 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${endedReason}`);
 
-    // Determinar estritamente se a chamada foi efetivamente atendida (Duração > 0s E Transcrição)
-    const duration = Number(call?.duration || 0);
-    const transcriptTextCheck = message?.transcript || call?.transcript || message?.artifact?.transcript || call?.artifact?.transcript || '';
-
-    const isSuccess = duration > 0 && Boolean(transcriptTextCheck && transcriptTextCheck.trim().length > 0);
-    const callStatus = isSuccess ? 'completed' : 'failed';
+    // Determinar se a chamada foi atendida com sucesso
+    const successReasons = [
+      'assistant-completed-task', 
+      'customer-ended-call', 
+      'assistant-ended-call', 
+      'customer-hung-up', 
+      'silence-timed-out',
+      'silence',
+      'assistant-said-end-call-phrase',
+      'normal-clearing',
+      'call-ended-by-assistant'
+    ];
     
-    const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${call?.duration || 0}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
-    
-    // Classificar ocorrência
-    const occurrence = classifyCallOccurrence({
-      endedReason: call?.endedReason || call?.ended_reason,
-      summary: call?.summary,
-      transcript: message?.transcript || call?.transcript || message?.artifact?.transcript || call?.artifact?.transcript,
-      duration: call?.duration
-    });
+    const lowerReason = String(endedReason || '').toLowerCase();
+    const isSuccessReason = successReasons.some(r => lowerReason.includes(r));
+    const duration = Number(call?.duration || message?.duration || 0);
 
     let transcriptText = 
       message?.transcript || 
@@ -844,16 +928,27 @@ app.post('/api/vapi-webhook', async (req, res) => {
     const recordingUrl = 
       message?.recordingUrl || 
       message?.stereoRecordingUrl || 
-      message?.monoRecordingUrl || 
       message?.artifact?.recordingUrl || 
-      message?.artifact?.stereoRecordingUrl || 
-      message?.artifact?.monoRecordingUrl || 
       call?.recordingUrl || 
       call?.stereoRecordingUrl || 
-      call?.monoRecordingUrl || 
       call?.artifact?.recordingUrl || 
-      call?.artifact?.stereoRecordingUrl || 
       null;
+
+    const isSuccess = (isSuccessReason || duration > 0 || Boolean(transcriptText)) && 
+                      !lowerReason.includes('customer-did-not-answer') && 
+                      !lowerReason.includes('customer-busy') && 
+                      !lowerReason.includes('failed-to-connect');
+
+    const callStatus = isSuccess ? 'completed' : 'failed';
+    const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
+    
+    // Classificar ocorrência
+    const occurrence = classifyCallOccurrence({
+      endedReason: call?.endedReason || call?.ended_reason,
+      summary: call?.summary,
+      transcript: transcriptText,
+      duration: duration
+    });
 
     // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
     run(
