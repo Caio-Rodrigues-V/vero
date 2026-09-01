@@ -135,7 +135,7 @@ function initDb() {
     db.exec('UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
     db.exec('UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
     db.exec("UPDATE leads SET occurrence = 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE' WHERE (occurrence = 'PROMESSA BOLETO' OR occurrence = 'PROMESSA PIX') AND (transcript IS NULL OR transcript = '');");
-    db.exec("UPDATE leads SET call_status = 'failed' WHERE call_status = 'completed' AND (call_log LIKE '%customer-did-not-answer%' OR call_log LIKE '%customer-busy%' OR call_log LIKE '%no-answer%' OR call_log LIKE '%busy%') AND (transcript IS NULL OR transcript = '');");
+    db.exec("UPDATE leads SET call_status = 'failed' WHERE (call_duration = 0 OR call_duration IS NULL OR transcript IS NULL OR transcript = '') AND call_status = 'completed';");
   } catch (e) {}
 }
 
