@@ -119,7 +119,7 @@ export default function App() {
   // Simulation state
   const [simulating, setSimulating] = useState(false);
 
-  const [systemInfo, setSystemInfo] = useState<{ providerName?: string; dialerProvider?: string } | null>(null);
+  const [systemInfo, setSystemInfo] = useState<{ providerName?: string; dialerProvider?: string; defaultUploadDialerProvider?: 'vapi' | 'retell' } | null>(null);
 
   // Fetch initial data
   useEffect(() => {
@@ -139,8 +139,8 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setSystemInfo(data);
-        if (data.dialerProvider) {
-          setDialerProvider(data.dialerProvider);
+        if (data.defaultUploadDialerProvider === 'vapi' || data.defaultUploadDialerProvider === 'retell') {
+          setDialerProvider(data.defaultUploadDialerProvider);
         }
       }
     } catch (err) {

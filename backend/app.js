@@ -31,12 +31,15 @@ app.use(express.json());
 
 // Endpoint de diagnóstico do sistema
 app.get('/api/system-info', (req, res) => {
-  const dialerProvider = (process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
+  const configuredDialerProvider = (process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
+  const defaultUploadDialerProvider = (process.env.DEFAULT_UPLOAD_DIALER_PROVIDER || 'vapi').toLowerCase() === 'retell' ? 'retell' : 'vapi';
   res.json({
     domain: 'verolembrete.grupoddm.ia.br',
     serverIp: '129.121.42.250',
-    dialerProvider: dialerProvider,
-    providerName: dialerProvider === 'retell' ? 'Retell AI' : 'VAPI.ai',
+    dialerProvider: defaultUploadDialerProvider,
+    defaultUploadDialerProvider,
+    configuredDialerProvider,
+    providerName: defaultUploadDialerProvider === 'retell' ? 'Retell AI' : 'VAPI.ai',
     cwd: process.cwd(),
     dirname: __dirname,
     nodeVersion: process.version,
@@ -1002,7 +1005,22 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     }
 
     const { dialerProvider, vapiAssistantId, vapiPhoneNumberId } = req.body;
-    const provider = (dialerProvider || 'vapi').toLowerCase();
+    const requestedProvider = String(dialerProvider || 'vapi').toLowerCase();
+    const provider = requestedProvider === 'retell' ? 'retell' : 'vapi';
+
+    const activeCampaign = get(
+      `SELECT id, name
+       FROM campaigns
+       WHERE status = 'processing'
+       ORDER BY id DESC
+       LIMIT 1`
+    );
+
+    if (activeCampaign) {
+      return res.status(409).json({
+        error: `Já existe uma campanha em processamento (#${activeCampaign.id} - ${activeCampaign.name}). Pause essa campanha antes de importar uma nova planilha.`
+      });
+    }
 
     // 2. Inserir campanha no banco (status inicial como 'processing' para iniciar disparos imediatamente)
     const campaignResult = run(
@@ -1596,13 +1614,13 @@ app.get('*', (req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
   
-  // Auto-retomar e destravar campanhas ativas quando o servidor é reiniciado (pm2 restart all)
+  // Auto-retomar somente campanhas que já estavam em processamento quando o servidor reiniciou.
   try {
-    const activeCampaigns = all("SELECT id FROM campaigns WHERE status IN ('processing', 'paused', 'pending') ORDER BY id DESC LIMIT 1");
+    const activeCampaigns = all("SELECT id FROM campaigns WHERE status = 'processing' ORDER BY id DESC LIMIT 1");
     if (activeCampaigns && activeCampaigns.length > 0) {
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
-      console.log(`[AUTO-RESUME] Destravando e retomando discagem da campanha #${activeCampaigns[0].id} automaticamente...`);
-      run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND (call_status IS NULL OR call_status != 'completed')", [activeCampaigns[0].id]);
+      console.log(`[AUTO-RESUME] Retomando discagem da campanha #${activeCampaigns[0].id} automaticamente...`);
+      run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress')", [activeCampaigns[0].id]);
       run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [activeCampaigns[0].id]);
       triggerCampaignProcessor(activeCampaigns[0].id);
     }
