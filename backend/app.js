@@ -872,9 +872,11 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [callStatus, logText, occurrence, transcriptText, recordingUrl, leadId]
     );
 
-    // Regra de Negócio Precisa: Só envia SMS/E-mail se o cliente atendeu E formalizou/confirmou expressamente (CPC / Promessa)
-    // Se o lead atendeu mas desligou rápido, caiu ou deu atendimento não tabulado, NÃO dispara SMS nem E-mail
-    const isCpcConfirmed = callStatus === 'completed' && validCpcOccurrences.includes(occurrence);
+    // Regra de Negócio: Envia SMS se o cliente confirmou ser a pessoa certa (CPC: "Sim", "Sou eu", "Correto", "Pode falar", etc) ou ocorrência qualificada
+    const customerSpeech = transcriptText ? transcriptText.toLowerCase() : '';
+    const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|e ele|e ela|isso|confirmado|falo|alô|alo)\b/i.test(customerSpeech);
+    const isCpcConfirmed = (callStatus === 'completed' || Number(call?.duration || 0) > 0) && 
+      (validCpcOccurrences.includes(occurrence) || isAffirmativeCpc);
 
     if (isCpcConfirmed) {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
