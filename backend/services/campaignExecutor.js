@@ -67,9 +67,23 @@ async function processCampaign(campaignId, force = false) {
       );
 
       if (!lead) {
+        // Se não houver nenhum lead 'pending', mas restarem leads falhados/não contatados na campanha, reenfileira automaticamente para dar continuidade
+        const uncontactedFailed = get(
+          `SELECT COUNT(*) as count FROM leads WHERE campaign_id = ? AND call_status IN ('failed', 'calling')`,
+          [campaignId]
+        );
+
+        if (uncontactedFailed && uncontactedFailed.count > 0 && activeCalls === 0) {
+          console.log(`[EXECUTOR] Reenfileirando ${uncontactedFailed.count} leads falhados/não contatados para dar continuidade automática à campanha #${campaignId}...`);
+          run("UPDATE leads SET call_status = 'pending', call_log = 'Reenfileirado para continuidade do lote' WHERE campaign_id = ? AND call_status IN ('failed', 'calling')", [campaignId]);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue; // Continua a discagem no próximo ciclo do while!
+        }
+
         // Verificar se ainda restam ligações ativas rodando antes de concluir
         if (activeCalls === 0) {
           console.log(`[EXECUTOR] Todos os leads da campanha #${campaignId} foram finalizados com sucesso.`);
+          run("UPDATE campaigns SET status = 'completed' WHERE id = ?", [campaignId]);
         }
         break;
       }
