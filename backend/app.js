@@ -419,12 +419,18 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
       const recordingUrl = c.recordingUrl || c.artifact?.recordingUrl || null;
 
       const lowerReason = endedReason.toLowerCase();
-      const isSuccessReason = successReasons.some(r => lowerReason.includes(r));
-      const hasTranscript = Boolean(transcript && transcript.trim().length > 0);
-      const isAnswered = (dur > 0 || hasTranscript) && 
-                        !lowerReason.includes('customer-did-not-answer') && 
-                        !lowerReason.includes('customer-busy') && 
-                        !lowerReason.includes('failed-to-connect');
+      const isExplicitFailed = lowerReason.includes('customer-did-not-answer') || 
+                               lowerReason.includes('customer-busy') || 
+                               lowerReason.includes('no-answer') || 
+                               lowerReason.includes('busy') || 
+                               lowerReason.includes('failed-to-connect');
+
+      const isSilenceOrCustomer = lowerReason.includes('silence') || 
+                                 (lowerReason.includes('customer') && !lowerReason.includes('did-not-answer') && !lowerReason.includes('busy')) ||
+                                 lowerReason.includes('assistant-completed-task') ||
+                                 lowerReason.includes('assistant-ended-call');
+
+      const isAnswered = !isExplicitFailed && (isSilenceOrCustomer || dur > 0 || Boolean(transcript));
 
       if (isAnswered) {
         const phoneDigits = c.customer?.number ? c.customer.number.replace(/\D/g, '').slice(-8) : 'NOMATCH';
@@ -892,21 +898,8 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId}. Motivo: ${endedReason}`);
 
-    // Determinar se a chamada foi atendida com sucesso
-    const successReasons = [
-      'assistant-completed-task', 
-      'customer-ended-call', 
-      'assistant-ended-call', 
-      'customer-hung-up', 
-      'silence-timed-out',
-      'silence',
-      'assistant-said-end-call-phrase',
-      'normal-clearing',
-      'call-ended-by-assistant'
-    ];
-    
+    // Regra do Faraó: Classificar SILENCE e CUSTOMER (sem ser did-not-answer ou busy) como ATENDIDAS (completed/verde)
     const lowerReason = String(endedReason || '').toLowerCase();
-    const isSuccessReason = successReasons.some(r => lowerReason.includes(r));
     const duration = Number(call?.duration || message?.duration || 0);
 
     let transcriptText = 
@@ -934,11 +927,18 @@ app.post('/api/vapi-webhook', async (req, res) => {
       call?.artifact?.recordingUrl || 
       null;
 
-    const isSuccess = (isSuccessReason || duration > 0 || Boolean(transcriptText)) && 
-                      !lowerReason.includes('customer-did-not-answer') && 
-                      !lowerReason.includes('customer-busy') && 
-                      !lowerReason.includes('failed-to-connect');
+    const isExplicitFailed = lowerReason.includes('customer-did-not-answer') || 
+                             lowerReason.includes('customer-busy') || 
+                             lowerReason.includes('no-answer') || 
+                             lowerReason.includes('busy') || 
+                             lowerReason.includes('failed-to-connect');
 
+    const isSilenceOrCustomer = lowerReason.includes('silence') || 
+                               (lowerReason.includes('customer') && !lowerReason.includes('did-not-answer') && !lowerReason.includes('busy')) ||
+                               lowerReason.includes('assistant-completed-task') ||
+                               lowerReason.includes('assistant-ended-call');
+
+    const isSuccess = !isExplicitFailed && (isSilenceOrCustomer || duration > 0 || Boolean(transcriptText));
     const callStatus = isSuccess ? 'completed' : 'failed';
     const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
     
