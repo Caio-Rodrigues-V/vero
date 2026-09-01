@@ -976,7 +976,7 @@ app.get('/api/leads/:id/audio', async (req, res) => {
     }
 
     const { fetchVapiCallDetails } = require('./services/vapi.js');
-    let audioUrl = null;
+    let audioUrl = lead.recording_url;
 
     // 1. Buscar a URL de gravação atualizada diretamente da API REST da Vapi
     if (lead.call_id) {
@@ -987,16 +987,35 @@ app.get('/api/leads/:id/audio', async (req, res) => {
       }
     }
 
-    // 2. Fallback para a URL já salva no banco
-    if (!audioUrl) {
-      audioUrl = lead.recording_url;
+    // 2. Se ainda não achou, faz requisição raw na Vapi para checar stereoRecordingUrl/monoRecordingUrl/artifact
+    if (!audioUrl && lead.call_id) {
+      const apiKey = process.env.VAPI_API_KEY;
+      if (apiKey) {
+        try {
+          const vapiRes = await fetch(`https://api.vapi.ai/call/${lead.call_id}`, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          if (vapiRes.ok) {
+            const raw = await vapiRes.json();
+            audioUrl = raw.recordingUrl || raw.stereoRecordingUrl || raw.monoRecordingUrl || raw.artifact?.recordingUrl || raw.artifact?.stereoRecordingUrl || raw.artifact?.monoRecordingUrl || raw.recording || null;
+            if (audioUrl) {
+              run('UPDATE leads SET recording_url = ? WHERE id = ?', [audioUrl, lead.id]);
+            }
+          }
+        } catch (e) {}
+      }
     }
 
     if (!audioUrl) {
       if (!lead.call_id) {
-        return res.status(404).send(`Lead #${id} (${lead.name}) não possui ID de chamada (call_id) registrado no banco.`);
+        return res.status(404).send(`Lead #${id} (${lead.name}) não possui ID de chamada registrado no banco.`);
       }
-      return res.status(404).send(`A Vapi informou que não há gravação de áudio gerada para a chamada ${lead.call_id} do lead #${id} (${lead.name}).`);
+      return res.status(404).send(`A Vapi não encontrou gravação de áudio para a chamada ${lead.call_id}.`);
+    }
+
+    // Se for URL pública presigned de S3 ou Google Cloud, redireciona diretamente
+    if (audioUrl.includes('s3.amazonaws.com') || audioUrl.includes('storage.googleapis.com')) {
+      return res.redirect(audioUrl);
     }
 
     const apiKey = process.env.VAPI_API_KEY;
@@ -1008,13 +1027,11 @@ app.get('/api/leads/:id/audio', async (req, res) => {
     let audioRes = await fetch(audioUrl, { headers });
 
     if (!audioRes.ok) {
-      // Tentar sem o cabeçalho Authorization caso a S3 exija presigned URL pura
       audioRes = await fetch(audioUrl);
     }
 
     if (!audioRes.ok) {
-      console.error(`[AUDIO PROXY FAIL] Lead #${id} | URL: ${audioUrl} | HTTP Status: ${audioRes.status}`);
-      return res.status(audioRes.status).send(`Erro HTTP ${audioRes.status} ao carregar o áudio na Vapi.`);
+      return res.redirect(audioUrl);
     }
 
     const buffer = Buffer.from(await audioRes.arrayBuffer());

@@ -388,30 +388,33 @@ async function fetchVapiCallDetails(callId) {
     const data = await response.json();
 
     const recordingUrl = 
-      data.recordingUrl || 
-      data.stereoRecordingUrl || 
-      data.monoRecordingUrl ||
-      data.recording ||
-      data.artifactUrl ||
-      data.artifact?.recordingUrl || 
-      data.artifact?.stereoRecordingUrl || 
-      data.artifact?.monoRecordingUrl ||
-      data.artifact?.recording ||
-      data.artifact?.artifactUrl ||
-      data.callAnalysis?.recordingUrl ||
+      (typeof data.recordingUrl === 'string' ? data.recordingUrl : null) || 
+      (typeof data.stereoRecordingUrl === 'string' ? data.stereoRecordingUrl : null) || 
+      (typeof data.monoRecordingUrl === 'string' ? data.monoRecordingUrl : null) || 
+      (typeof data.recording === 'string' ? data.recording : null) ||
+      (typeof data.recording?.url === 'string' ? data.recording.url : null) ||
+      (typeof data.artifactUrl === 'string' ? data.artifactUrl : null) ||
+      (typeof data.artifact?.recordingUrl === 'string' ? data.artifact.recordingUrl : null) || 
+      (typeof data.artifact?.stereoRecordingUrl === 'string' ? data.artifact.stereoRecordingUrl : null) || 
+      (typeof data.artifact?.monoRecordingUrl === 'string' ? data.artifact.monoRecordingUrl : null) ||
+      (typeof data.artifact?.recording === 'string' ? data.artifact.recording : null) ||
+      (typeof data.artifact?.recording?.url === 'string' ? data.artifact.recording.url : null) ||
+      (typeof data.artifact?.artifactUrl === 'string' ? data.artifact.artifactUrl : null) ||
+      (typeof data.callAnalysis?.recordingUrl === 'string' ? data.callAnalysis.recordingUrl : null) ||
       null;
 
     let transcript = data.transcript || data.artifact?.transcript || data.analysis?.transcript || null;
-    if (!transcript && Array.isArray(data.artifact?.messages)) {
-      transcript = data.artifact.messages
-        .filter(m => m.role && (m.message || m.content))
-        .map(m => `${m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente'}: ${m.message || m.content}`)
-        .join('\n');
-    }
-    if (!transcript && Array.isArray(data.messages)) {
-      transcript = data.messages
-        .filter(m => m.role && (m.message || m.content))
-        .map(m => `${m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente'}: ${m.message || m.content}`)
+    
+    const msgList = data.artifact?.messages || data.messages || data.artifact?.messagesOpenAIFormatted;
+    if (!transcript && Array.isArray(msgList)) {
+      transcript = msgList
+        .filter(m => m && m.role !== 'system' && (m.message || m.content || m.text))
+        .map(m => {
+          const sender = m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente';
+          const text = m.message || m.content || m.text || '';
+          return `${sender}: ${text}`;
+        })
+        .filter(str => !str.endsWith(': '))
         .join('\n');
     }
 
