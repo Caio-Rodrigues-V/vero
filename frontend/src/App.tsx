@@ -226,26 +226,22 @@ export default function App() {
       .catch(err => console.error('Error fetching live lead details:', err));
   };
 
-  // Poll for campaign updates if there is a processing campaign
+  // Auto-refresh contínuo do dashboard a cada 3 segundos para acompanhar todas as chamadas da Vapi ao vivo
   useEffect(() => {
-    const hasActiveCampaign = campaigns.some(c => c.status === 'processing');
-    let interval: any;
+    fetchStats();
+    fetchCampaigns();
 
-    if (hasActiveCampaign) {
-      interval = setInterval(() => {
-        fetchCampaigns();
-        fetchStats();
-        fetchOccurrences(selectedCampaignId || 'all');
-        if (selectedCampaignId) {
-          fetchLeads(selectedCampaignId, leadsPage);
-        }
-      }, 2000);
-    }
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchCampaigns();
+      fetchOccurrences(selectedCampaignId || 'all');
+      if (selectedCampaignId) {
+        fetchLeads(selectedCampaignId, leadsPage);
+      }
+    }, 3000);
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [campaigns, selectedCampaignId, leadsPage]);
+    return () => clearInterval(interval);
+  }, [selectedCampaignId, leadsPage]);
 
   const fetchStats = async () => {
     try {
