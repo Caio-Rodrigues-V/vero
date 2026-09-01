@@ -135,6 +135,7 @@ function initDb() {
     db.exec('UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
     db.exec('UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
     db.exec("UPDATE leads SET occurrence = 'TENTATIVA - LIGAÇÃO MUDA / DESLIGOU' WHERE occurrence = 'TENTATIVA - ATENDIMENTO NÃO TABULADO';");
+    db.exec("UPDATE leads SET occurrence = 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE' WHERE (occurrence = 'PROMESSA BOLETO' OR occurrence = 'PROMESSA PIX') AND (transcript IS NULL OR transcript = '');");
   } catch (e) {}
 }
 
