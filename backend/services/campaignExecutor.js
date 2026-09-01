@@ -40,9 +40,9 @@ async function processCampaign(campaignId, force = false) {
         [campaignId]
       );
 
-      // 2. Verificar limite de chamadas ativas simultâneas (Limite Estrito: Máximo 8 de 8 em 8)
-      const campaignLimit = campaign.concurrency_limit ? parseInt(campaign.concurrency_limit, 10) : 8;
-      const concurrencyLimit = Math.min(isNaN(campaignLimit) || campaignLimit <= 0 ? 8 : campaignLimit, 8);
+      // 2. Verificar limite de chamadas ativas simultâneas (Trava de Segurança: Máximo 5 simultâneas para não estourar o limite de 10 da Vapi)
+      const campaignLimit = campaign.concurrency_limit ? parseInt(campaign.concurrency_limit, 10) : 5;
+      const concurrencyLimit = Math.min(isNaN(campaignLimit) || campaignLimit <= 0 ? 5 : campaignLimit, 5);
 
       const activeCallsObj = get(
         `SELECT COUNT(*) as count FROM leads WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress')`,
