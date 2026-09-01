@@ -113,7 +113,8 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     return 'ALEGA PAGAMENTO - SEM COMPROVANTE';
   }
 
-  if (
+  // PROMESSA DE PAGAMENTO: Requer menção explícita de pagamento/envio do boleto
+  const hasPromiseKeywords = 
     combinedText.includes('promessa') || 
     combinedText.includes('vou pagar') || 
     combinedText.includes('pago amanha') || 
@@ -121,8 +122,13 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     combinedText.includes('envia o boleto') || 
     combinedText.includes('envia o sms') || 
     combinedText.includes('mandar o sms') || 
-    combinedText.includes('enviar o boleto')
-  ) {
+    combinedText.includes('enviar o boleto') ||
+    combinedText.includes('pode mandar') ||
+    combinedText.includes('manda o boleto') ||
+    combinedText.includes('manda por sms') ||
+    combinedText.includes('vou quitar');
+
+  if (hasPromiseKeywords) {
     if (combinedText.includes('pix')) return 'PROMESSA PIX';
     if (combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
     return 'PROMESSA BOLETO';
@@ -166,15 +172,7 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     return 'RETORNO AGENDADO COM CLIENTE';
   }
 
-  // Se o cliente confirmou ("sim", "sou eu", "correto", "pode falar") e durou mais de 8s
-  const isAffirmative = /\b(sim|sou eu|correto|pode falar|e ele|e ela)\b/.test(customerSpeech);
-  if (isAffirmative || dur >= 8) {
-    if (combinedText.includes('pix')) return 'PROMESSA PIX';
-    if (combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
-    return 'PROMESSA BOLETO';
-  }
-
-  // 4. Quedas durante a chamada qualificada
+  // 4. Quedas durante a chamada atendida sem promessa formalizada
   if (dur >= 8 && (reason === 'customer-hung-up' || reason === 'assistant-hung-up')) {
     return 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE';
   }
