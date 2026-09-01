@@ -262,11 +262,14 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns`);
       if (res.ok) {
-        const data = await res.json();
+        const data: Campaign[] = await res.json();
         setCampaigns(data);
-        if (data.length > 0 && selectedCampaignId === null) {
-          setSelectedCampaignId(data[0].id);
-          fetchLeads(data[0].id, 1);
+        if (data.length > 0) {
+          const currentId = selectedCampaignId;
+          const isValidId = currentId === 'all' || (typeof currentId === 'number' && data.some(c => c.id === currentId));
+          const targetId = isValidId && currentId !== null ? currentId : data[0].id;
+          setSelectedCampaignId(targetId);
+          fetchLeads(targetId, leadsPage);
         }
       }
     } catch (err) {

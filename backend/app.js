@@ -154,8 +154,10 @@ app.get('/api/campaigns/:id/leads', (req, res) => {
   const search = (req.query.search || '').trim();
 
   try {
-    let whereClause = id === 'all' ? 'WHERE 1=1' : 'WHERE campaign_id = ?';
-    const params = id === 'all' ? [] : [id];
+    const isAll = id === 'all' || id === '0';
+    const numericId = isAll ? 'all' : parseInt(id, 10);
+    let whereClause = isAll ? 'WHERE 1=1' : 'WHERE campaign_id = ?';
+    const params = isAll ? [] : [numericId];
 
     if (statusFilter === 'delivered' || statusFilter === 'completed') {
       whereClause += " AND call_status = 'completed'";
