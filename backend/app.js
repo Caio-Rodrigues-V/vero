@@ -453,6 +453,19 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
             [callId, dur, transcript, recordingUrl, `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${dur}s.`, targetLead.id]
           );
           restoredCount++;
+
+          // Disparar SMS/RCS automático via n8n para a Jeane e qualquer chamada atendida
+          const updatedLead = get('SELECT * FROM leads WHERE id = ?', [targetLead.id]);
+          if (updatedLead && updatedLead.sms_status !== 'completed') {
+            const { triggerN8NSmsWebhook } = require('./services/communication.js');
+            triggerN8NSmsWebhook(updatedLead)
+              .then(smsResult => {
+                const smsStatus = smsResult.success ? 'completed' : 'failed';
+                const smsLog = smsResult.success ? `[SMS] Enviado com sucesso via n8n/Unipix.` : smsResult.log;
+                run('UPDATE leads SET sms_status = ?, sms_log = ? WHERE id = ?', [smsStatus, smsLog, targetLead.id]);
+              })
+              .catch(e => {});
+          }
         }
       }
     }
@@ -846,8 +859,9 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
       // Verificar se algum dos tool calls é para enviar o SMS
       const hasSmsToolCall = toolCalls.some(tc => {
-        const funcName = tc.function?.name || tc.name;
-        return funcName === 'enviar_sms_linha_digitavel';
+        const funcName = tc.function?.name || tc.name || '';
+        const normFunc = String(funcName).toLowerCase().replace(/[\s_-]+/g, '');
+        return normFunc.includes('enviarsms') || normFunc.includes('sms');
       });
 
       if (hasSmsToolCall && leadId) {
@@ -867,11 +881,12 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
       return res.status(200).json({
         results: toolCalls.map(tc => {
-          const funcName = tc.function?.name || tc.name;
+          const funcName = tc.function?.name || tc.name || '';
+          const normFunc = String(funcName).toLowerCase().replace(/[\s_-]+/g, '');
           let resultMessage = 'Tool executada com sucesso.';
-          if (funcName === 'enviar_sms_linha_digitavel') {
+          if (normFunc.includes('enviarsms') || normFunc.includes('sms')) {
             resultMessage = 'SMS enviado com sucesso para o celular do cliente.';
-          } else if (funcName === 'voicemail_tool') {
+          } else if (normFunc.includes('voicemail')) {
             resultMessage = 'Caixa postal detectada.';
           }
           return {
