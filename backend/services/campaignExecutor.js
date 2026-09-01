@@ -15,10 +15,10 @@ async function processCampaign(campaignId, force = false) {
   }
   activeJobs.add(campaignId);
 
-  const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '500', 10);
-  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 50 ? 500 : paceDelayMs;
+  const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '1500', 10);
+  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 500 ? 1500 : paceDelayMs;
 
-  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência: até 8 simultâneas | Intervalo de disparo: ${safePaceDelay}ms)`);
+  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência: até 8 simultâneas | Pace Delay SIP: ${safePaceDelay}ms)`);
 
   try {
     while (activeJobs.has(campaignId)) {
