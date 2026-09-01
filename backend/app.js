@@ -299,21 +299,35 @@ app.post('/api/campaigns/:id/cancel', handlePauseCampaign);
 app.post('/api/campaigns/:id/start', (req, res) => {
   const { id } = req.params;
   try {
-    const campaign = get('SELECT status FROM campaigns WHERE id = ?', [id]);
+    const campaign = get('SELECT id, status FROM campaigns WHERE id = ?', [id]);
     if (!campaign) {
       return res.status(404).json({ error: 'Campanha não encontrada' });
     }
 
-    if (campaign.status === 'pending' || campaign.status === 'failed' || campaign.status === 'processing' || campaign.status === 'completed' || campaign.status === 'paused') {
-      // Destravar todos os leads pendentes da campanha para disparo
-      run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
-      // Executa a função assíncrona de processamento em background
-      const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
-      triggerCampaignProcessor(Number(id));
-      res.json({ success: true, message: 'Disparos da campanha iniciados/retomados com sucesso.' });
-    } else {
-      res.status(400).json({ error: 'Apenas campanhas pendentes ou pausadas podem ser iniciadas.' });
-    }
+    // Marca campanha como processing e descongela chamadas presas em calling
+    run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
+    run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [id]);
+
+    const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
+    triggerCampaignProcessor(Number(id));
+    res.json({ success: true, message: 'Disparos da campanha iniciados/retomados com sucesso.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Resetar e rediscar chamadas com falha de uma campanha
+ */
+app.post('/api/campaigns/:id/retry-failed', (req, res) => {
+  const { id } = req.params;
+  try {
+    run("UPDATE leads SET call_status = 'pending', call_log = 'Reenfileirado para discagem' WHERE campaign_id = ? AND (call_status = 'failed' OR call_status = 'calling')", [id]);
+    run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
+
+    const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
+    triggerCampaignProcessor(Number(id));
+    res.json({ success: true, message: 'Leads com falha reenfileirados para discagem com sucesso.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
