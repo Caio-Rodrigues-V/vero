@@ -46,6 +46,7 @@ interface Lead {
   occurrence?: string;
   call_status: 'pending' | 'processing' | 'calling' | 'completed' | 'failed';
   call_attempts: number;
+  call_duration?: number;
   call_log: string;
   sms_status: 'pending' | 'processing' | 'sending' | 'completed' | 'failed';
   sms_log: string;
@@ -1477,10 +1478,14 @@ export default function App() {
             </div>
 
             <div className="overflow-y-auto flex-1 space-y-3 p-3 bg-slate-50 rounded-xl text-xs">
-              {(selectedTranscriptLead.recording_url || selectedTranscriptLead.call_id) && (
+              {(selectedTranscriptLead.recording_url || (selectedTranscriptLead.call_id && (Number(selectedTranscriptLead.call_duration || 0) > 0 || (selectedTranscriptLead.call_log && !selectedTranscriptLead.call_log.includes('Duração: 0s'))))) ? (
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gravação do Áudio da Chamada</span>
                   <audio controls src={`${BACKEND_URL}/api/leads/${selectedTranscriptLead.id}/audio?t=${Date.now()}`} className="w-full h-8" />
+                </div>
+              ) : (
+                <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-800 text-[11px] font-medium flex items-center gap-1.5">
+                  <span>ℹ️ Gravação indisponível: O cliente não atendeu a ligação (Duração: 0s).</span>
                 </div>
               )}
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição / Histórico da Ligação</span>
