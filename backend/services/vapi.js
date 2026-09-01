@@ -354,7 +354,7 @@ async function makeVapiCall(lead) {
     // Salvar o call_id da VAPI diretamente no lead para auditoria e callbacks
     try {
       const { run: runDb } = require('../db.js');
-      runDb('UPDATE leads SET call_id = ? WHERE id = ?', [data.id, lead.id]);
+      runDb('UPDATE leads SET call_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [data.id, lead.id]);
     } catch (e) {
       console.error('[VAPI DB UPDATE WARN]', e.message);
     }

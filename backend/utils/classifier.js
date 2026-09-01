@@ -183,5 +183,7 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
 
 module.exports = {
   validCpcOccurrences,
+  normalizeText,
+  extractCustomerSpeech,
   classifyCallOccurrence
 };

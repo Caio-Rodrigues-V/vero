@@ -36,7 +36,7 @@ async function processCampaign(campaignId, force = false) {
       run(
         `UPDATE leads 
          SET call_status = 'failed', sms_status = 'failed', sms_log = 'Cancelado: Timeout de chamada.', email_status = 'failed', email_log = 'Cancelado: Timeout de chamada.', occurrence = '999 - TIMEOUT_DISCAGEM', call_log = 'Timeout: Chamada sem callback do provedor por mais de 3 minutos', updated_at = CURRENT_TIMESTAMP 
-         WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress') AND (created_at IS NULL OR datetime(created_at) < datetime('now', '-3 minutes'))`,
+         WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress') AND datetime(COALESCE(updated_at, created_at, '1970-01-01')) < datetime('now', '-3 minutes')`,
         [campaignId]
       );
 
@@ -109,7 +109,8 @@ async function processCampaign(campaignId, force = false) {
                sms_status = 'failed',
                sms_log = 'Ignorado: Quarentena de 3d ativa.',
                email_status = 'failed',
-               email_log = 'Ignorado: Quarentena de 3d ativa.'
+               email_log = 'Ignorado: Quarentena de 3d ativa.',
+               updated_at = CURRENT_TIMESTAMP
            WHERE id = ?`,
           [lead.id]
         );
@@ -125,7 +126,7 @@ async function processCampaign(campaignId, force = false) {
       // 4. Marcar o lead como 'calling' no banco temporariamente
       run(
         `UPDATE leads 
-         SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem ${provider.toUpperCase()}...' 
+         SET call_status = 'calling', sms_status = 'pending', email_status = 'pending', call_log = 'Iniciando discagem ${provider.toUpperCase()}...', updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
         [lead.id]
       );
@@ -152,7 +153,7 @@ async function processCampaign(campaignId, force = false) {
           if (isConcurrencyError) {
             console.log(`[EXECUTOR CONCORRÊNCIA] Limite de concorrência/rate limit (${provider.toUpperCase()}) atingido. Devolvendo lead #${lead.id} para a fila e aguardando 3s...`);
             run(
-              `UPDATE leads SET call_status = 'pending', call_log = 'Aguardando liberação de vaga no canal...' WHERE id = ?`,
+              `UPDATE leads SET call_status = 'pending', call_log = 'Aguardando liberação de vaga no canal...', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
               [lead.id]
             );
             await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -162,7 +163,7 @@ async function processCampaign(campaignId, force = false) {
           // Falha permanente no número/discagem
           run(
             `UPDATE leads 
-             SET call_status = 'failed', call_log = ?, sms_status = 'failed', sms_log = 'Cancelado: Falha na chamada.', email_status = 'failed', email_log = 'Cancelado: Falha na chamada.', call_attempts = call_attempts + 1 
+             SET call_status = 'failed', call_log = ?, sms_status = 'failed', sms_log = 'Cancelado: Falha na chamada.', email_status = 'failed', email_log = 'Cancelado: Falha na chamada.', call_attempts = call_attempts + 1, updated_at = CURRENT_TIMESTAMP 
              WHERE id = ?`,
             [callResult.log, lead.id]
           );
@@ -176,7 +177,7 @@ async function processCampaign(campaignId, force = false) {
           // Chamada iniciada na VAPI com sucesso, aguardando webhook de finalização
           run(
             `UPDATE leads 
-             SET call_log = ?, call_attempts = call_attempts + 1 
+             SET call_log = ?, call_attempts = call_attempts + 1, updated_at = CURRENT_TIMESTAMP 
              WHERE id = ?`,
             [callResult.log, lead.id]
           );
@@ -184,7 +185,7 @@ async function processCampaign(campaignId, force = false) {
       } catch (err) {
         console.error(`[EXECUTOR ERROR] Falha no disparo do lead #${lead.id}:`, err.message);
         run(
-          `UPDATE leads SET call_status = 'failed', sms_status = 'failed', sms_log = 'Cancelado: Erro de execução.', email_status = 'failed', email_log = 'Cancelado: Erro de execução.', call_log = ? WHERE id = ?`,
+          `UPDATE leads SET call_status = 'failed', sms_status = 'failed', sms_log = 'Cancelado: Erro de execução.', email_status = 'failed', email_log = 'Cancelado: Erro de execução.', call_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
           [`Erro de execução: ${err.message}`, lead.id]
         );
       }
@@ -204,7 +205,7 @@ async function processCampaign(campaignId, force = false) {
  */
 function triggerCampaignProcessor(campaignIdToForce = null) {
   if (campaignIdToForce) {
-    run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [campaignIdToForce]);
+    run("UPDATE leads SET call_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE campaign_id = ? AND call_status = 'calling'", [campaignIdToForce]);
     processCampaign(campaignIdToForce, true);
     return;
   }

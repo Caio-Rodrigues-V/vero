@@ -42,7 +42,7 @@ function updateCampaignStats(campaignId) {
       SELECT COUNT(id) as count 
       FROM leads 
       WHERE campaign_id = ? 
-        AND call_status IN ('pending', 'processing', 'calling')
+        AND call_status IN ('pending', 'processing', 'calling', 'in_progress')
     `, [campaignId]);
 
     if (pendingLeads && pendingLeads.count === 0) {

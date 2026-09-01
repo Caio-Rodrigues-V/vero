@@ -10,7 +10,7 @@ const { parseSpreadsheet } = require('./utils/parser.js');
 const { triggerCampaignProcessor, startMonitorLoop } = require('./services/campaignExecutor.js');
 const { updateCampaignStats } = require('./services/stats.js');
 const xlsx = require('xlsx');
-const { classifyCallOccurrence, validCpcOccurrences } = require('./utils/classifier.js');
+const { classifyCallOccurrence, extractCustomerSpeech, normalizeText, validCpcOccurrences } = require('./utils/classifier.js');
 
 dotenv.config();
 
@@ -56,11 +56,20 @@ app.use(express.static(publicPath));
 initDb();
 startMonitorLoop();
 
+function recalculateActiveCampaigns() {
+  const activeCampaigns = all("SELECT id FROM campaigns WHERE status IN ('processing', 'paused')");
+  for (const campaign of activeCampaigns) {
+    updateCampaignStats(campaign.id);
+  }
+}
+
 /**
  * Rota para obter estatísticas resumidas da Dashboard
  */
 app.get('/api/dashboard/stats', (req, res) => {
   try {
+    recalculateActiveCampaigns();
+
     const stats = get(`
       SELECT 
         COUNT(id) as total_campaigns,
@@ -120,6 +129,8 @@ app.get('/api/dashboard/occurrences', (req, res) => {
  */
 app.get('/api/campaigns', (req, res) => {
   try {
+    recalculateActiveCampaigns();
+
     const campaigns = all('SELECT * FROM campaigns ORDER BY created_at DESC');
     res.json(campaigns);
   } catch (error) {
@@ -397,11 +408,135 @@ app.post('/api/campaigns/:id/force-unlock', (req, res) => {
   }
 });
 
+function getVapiTranscript(call) {
+  let transcript =
+    call?.transcript ||
+    call?.artifact?.transcript ||
+    call?.analysis?.transcript ||
+    call?.callAnalysis?.transcript ||
+    '';
+
+  const messages = call?.artifact?.messages || call?.messages || call?.artifact?.messagesOpenAIFormatted;
+  if (!transcript && Array.isArray(messages)) {
+    transcript = messages
+      .filter(m => m && m.role !== 'system' && (m.message || m.content || m.text))
+      .map(m => {
+        const sender = m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente';
+        return `${sender}: ${m.message || m.content || m.text || ''}`;
+      })
+      .filter(str => !str.endsWith(': '))
+      .join('\n');
+  }
+
+  return transcript || '';
+}
+
+function getVapiRecordingUrl(call) {
+  return (
+    call?.recordingUrl ||
+    call?.stereoRecordingUrl ||
+    call?.monoRecordingUrl ||
+    call?.artifact?.recordingUrl ||
+    call?.artifact?.stereoRecordingUrl ||
+    call?.artifact?.monoRecordingUrl ||
+    call?.recording?.url ||
+    call?.artifact?.recording?.url ||
+    null
+  );
+}
+
+function getVapiDurationSeconds(call) {
+  if (Number(call?.duration) > 0) return Number(call.duration);
+  if (call?.endedAt) {
+    const startedAt = call.startedAt || call.createdAt;
+    if (startedAt) {
+      const durationMs = new Date(call.endedAt) - new Date(startedAt);
+      if (!Number.isNaN(durationMs) && durationMs > 0) {
+        return Math.round(durationMs / 1000);
+      }
+    }
+  }
+  return 0;
+}
+
+function isVapiExplicitFailure(endedReason) {
+  const reason = String(endedReason || '').toLowerCase();
+  return reason.includes('voicemail') ||
+    reason.includes('customer-did-not-answer') ||
+    reason.includes('customer-busy') ||
+    reason.includes('no-answer') ||
+    reason.includes('busy') ||
+    reason.includes('failed-to-connect') ||
+    reason.includes('sip-outbound-call-failed');
+}
+
+function isVapiAnsweredCall(call, transcript, duration) {
+  const reason = String(call?.endedReason || call?.ended_reason || '').toLowerCase();
+  const isSilenceOrCustomer = reason.includes('silence') ||
+    (reason.includes('customer') && !reason.includes('did-not-answer') && !reason.includes('busy')) ||
+    reason.includes('assistant-completed-task') ||
+    reason.includes('assistant-ended-call');
+
+  return !isVapiExplicitFailure(reason) && (isSilenceOrCustomer || duration > 0 || Boolean(transcript));
+}
+
+function vapiCallBelongsToCampaign(call, campaign, campaignId) {
+  const metadataCampaignId = call?.metadata?.campaign_id;
+  if (String(metadataCampaignId || '') !== String(campaignId)) return false;
+
+  if (campaign.vapi_assistant_id && call?.assistantId && call.assistantId !== campaign.vapi_assistant_id) {
+    return false;
+  }
+
+  if (campaign.vapi_phone_number_id && call?.phoneNumberId && call.phoneNumberId !== campaign.vapi_phone_number_id) {
+    return false;
+  }
+
+  return true;
+}
+
+async function fetchVapiCallsPage(apiKey, params) {
+  let lastBody = '';
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const response = await fetch(`https://api.vapi.ai/call?${params.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    lastBody = await response.text();
+
+    if (response.status === 429) {
+      const delayMs = Math.min(1500 * attempt * attempt, 12000);
+      console.log(`[VAPI SYNC] Rate limit 429. Tentativa ${attempt}/5. Aguardando ${delayMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      continue;
+    }
+
+    let data;
+    try {
+      data = JSON.parse(lastBody);
+    } catch (e) {
+      data = [];
+    }
+
+    if (!response.ok) {
+      const errorMessage = data?.message || data?.error || lastBody || `HTTP ${response.status}`;
+      throw new Error(`Vapi retornou ${response.status}: ${errorMessage}`);
+    }
+
+    return Array.isArray(data) ? data : (data.results || data.data || data.calls || []);
+  }
+
+  throw new Error(`Vapi retornou 429 Rate Limit após retentativas: ${lastBody || 'sem corpo'}`);
+}
+
 /**
- * Rota para ressincronizar todas as chamadas atendidas da Vapi diretamente REST API
+ * Rota para ressincronizar chamadas da Vapi diretamente pela REST API.
  */
 app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
-  const { id } = req.params;
+  const campaignId = Number(req.params.id);
   const apiKey = process.env.VAPI_API_KEY;
 
   if (!apiKey) {
@@ -409,125 +544,174 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
   }
 
   try {
-    // Retry com Backoff Exponencial se a Vapi retornar 429 Rate Limit
-    let vapiRes;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      vapiRes = await fetch('https://api.vapi.ai/call?limit=100', {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
+    const campaign = get('SELECT * FROM campaigns WHERE id = ?', [campaignId]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada.' });
+    }
+
+    const limit = Math.min(parseInt(req.body?.limit || req.query.limit || '500', 10) || 500, 500);
+    const maxPages = Math.min(parseInt(req.body?.maxPages || req.query.maxPages || '12', 10) || 12, 50);
+    const sendMessages = req.body?.sendMessages !== false && req.query.sendMessages !== 'false';
+
+    let createdAtLt = null;
+    const summary = {
+      fetched: 0,
+      matched: 0,
+      updated: 0,
+      completed: 0,
+      failed: 0,
+      skippedOpen: 0,
+      skippedNoLead: 0,
+      pages: 0,
+      stoppedAt: null
+    };
+
+    for (let page = 1; page <= maxPages; page++) {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (campaign.vapi_assistant_id) params.set('assistantId', campaign.vapi_assistant_id);
+      if (campaign.vapi_phone_number_id) params.set('phoneNumberId', campaign.vapi_phone_number_id);
+      if (createdAtLt) params.set('createdAtLt', createdAtLt);
+
+      const calls = await fetchVapiCallsPage(apiKey, params);
+      summary.pages++;
+      summary.fetched += calls.length;
+
+      if (!calls.length) break;
+
+      let matchedInPage = 0;
+
+      for (const c of calls) {
+        if (!vapiCallBelongsToCampaign(c, campaign, campaignId)) continue;
+        matchedInPage++;
+        summary.matched++;
+
+        if (c.status && c.status !== 'ended' && !c.endedAt && !c.endedReason && !c.ended_reason) {
+          summary.skippedOpen++;
+          continue;
         }
-      });
 
-      if (vapiRes && vapiRes.status === 429) {
-        console.log(`[VAPI API] Rate limit 429 na tentativa ${attempt}. Aguardando 1.5s...`);
-        await new Promise(r => setTimeout(r, 1500 * attempt));
-        continue;
-      }
-      break;
-    }
+        const metadataLeadId = c.metadata?.lead_id;
+        let targetLead = null;
 
-    if (!vapiRes || !vapiRes.ok) {
-      return res.json({ 
-        success: true, 
-        restoredCount: 0, 
-        message: 'A API da Vapi está com tráfego intenso no momento. Tente novamente em alguns segundos.' 
-      });
-    }
+        if (metadataLeadId) {
+          targetLead = get('SELECT * FROM leads WHERE id = ? AND campaign_id = ?', [metadataLeadId, campaignId]);
+        }
 
-    const calls = await vapiRes.json();
-    const successReasons = [
-      'assistant-completed-task', 
-      'customer-ended-call', 
-      'assistant-ended-call', 
-      'customer-hung-up', 
-      'silence-timed-out',
-      'silence',
-      'assistant-said-end-call-phrase',
-      'normal-clearing',
-      'call-ended-by-assistant'
-    ];
+        if (!targetLead && c.id) {
+          targetLead = get('SELECT * FROM leads WHERE call_id = ? AND campaign_id = ?', [c.id, campaignId]);
+        }
 
-    let restoredCount = 0;
+        if (!targetLead) {
+          summary.skippedNoLead++;
+          continue;
+        }
 
-    for (const c of calls) {
-      const callId = c.id;
-      const endedReason = c.endedReason || '';
-      const dur = c.duration || (c.endedAt ? Math.round((new Date(c.endedAt) - new Date(c.startedAt || c.createdAt)) / 1000) : 0);
-      const transcript = c.transcript || c.artifact?.transcript || '';
-      const recordingUrl = c.recordingUrl || c.artifact?.recordingUrl || null;
+        const callId = c.id;
+        const endedReason = c.endedReason || c.ended_reason || 'sem_motivo';
+        const transcript = getVapiTranscript(c);
+        const recordingUrl = getVapiRecordingUrl(c);
+        const duration = getVapiDurationSeconds(c);
+        const callStatus = isVapiAnsweredCall(c, transcript, duration) ? 'completed' : 'failed';
+        const occurrence = classifyCallOccurrence({
+          endedReason,
+          summary: c.summary || c.analysis?.summary || c.artifact?.summary,
+          transcript,
+          duration
+        });
 
-      const lowerReason = endedReason.toLowerCase();
-      const isExplicitFailed = lowerReason.includes('voicemail') ||
-                               lowerReason.includes('customer-did-not-answer') || 
-                               lowerReason.includes('customer-busy') || 
-                               lowerReason.includes('no-answer') || 
-                               lowerReason.includes('busy') || 
-                               lowerReason.includes('failed-to-connect');
-
-      const isSilenceOrCustomer = lowerReason.includes('silence') || 
-                                 (lowerReason.includes('customer') && !lowerReason.includes('did-not-answer') && !lowerReason.includes('busy')) ||
-                                 lowerReason.includes('assistant-completed-task') ||
-                                 lowerReason.includes('assistant-ended-call');
-
-      const isAnswered = !isExplicitFailed && (isSilenceOrCustomer || dur > 0 || Boolean(transcript));
-
-      if (isAnswered) {
-        const phoneDigits = c.customer?.number ? c.customer.number.replace(/\D/g, '').slice(-8) : 'NOMATCH';
-        const targetLead = get(
-          'SELECT id FROM leads WHERE call_id = ? OR (phone LIKE ? AND campaign_id = ?)', 
-          [callId, `%${phoneDigits}%`, Number(id)]
+        run(
+          `UPDATE leads SET 
+            call_id = COALESCE(?, call_id),
+            call_status = ?,
+            call_duration = ?,
+            occurrence = ?,
+            transcript = COALESCE(NULLIF(?, ''), transcript),
+            recording_url = COALESCE(?, recording_url),
+            call_log = ?,
+            updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [
+            callId,
+            callStatus,
+            duration,
+            occurrence,
+            transcript,
+            recordingUrl,
+            `[VAPI SYNC] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s.`,
+            targetLead.id
+          ]
         );
 
-        if (targetLead) {
-          run(
-            `UPDATE leads SET 
-              call_id = ?,
-              call_status = 'completed', 
-              call_duration = ?, 
-              transcript = COALESCE(?, transcript), 
-              recording_url = COALESCE(?, recording_url),
-              call_log = ?
-             WHERE id = ?`,
-            [callId, dur, transcript, recordingUrl, `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${dur}s.`, targetLead.id]
-          );
-          restoredCount++;
+        summary.updated++;
+        if (callStatus === 'completed') summary.completed++;
+        if (callStatus === 'failed') summary.failed++;
 
-          // Regra Estrita de Envio de SMS: SÓ ENVIA SE O CLIENTE RESPONDER COM CPC AFIRMATIVO OU SE A TOOL DE SMS FOR ACIONADA
-          const transcriptText = transcript || '';
-          const customerSpeech = normalizeText(extractCustomerSpeech(transcriptText));
-          const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|alô|alo|isso|confirmo|exato|esta|é ela|e ela|é ele|e ele|eu mesma|eu mesmo|palestine|posso ajudar)\b/i.test(customerSpeech);
-          
-          const hasSmsToolCallInMessages = Array.isArray(c.artifact?.messages) && c.artifact.messages.some(m => {
-            const funcName = m.toolCalls?.[0]?.function?.name || m.name || '';
-            return String(funcName).toLowerCase().includes('sms');
-          });
+        const customerSpeech = normalizeText(extractCustomerSpeech(transcript));
+        const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|alo|isso|confirmo|exato|esta|e ela|e ele|eu mesma|eu mesmo|palestine|posso ajudar)\b/i.test(customerSpeech);
+        const hasSmsToolCallInMessages = Array.isArray(c.artifact?.messages) && c.artifact.messages.some(m => {
+          const funcName = m.toolCalls?.[0]?.function?.name || m.name || '';
+          return String(funcName).toLowerCase().includes('sms');
+        });
+        const shouldSendSms = callStatus === 'completed' &&
+          (validCpcOccurrences.includes(occurrence) || (isAffirmativeCpc && customerSpeech.trim().length > 0) || hasSmsToolCallInMessages);
 
-          const shouldSendSms = (isAffirmativeCpc && customerSpeech.trim().length > 0) || hasSmsToolCallInMessages;
-
-          if (shouldSendSms) {
-            const lead = get('SELECT * FROM leads WHERE id = ?', [targetLead.id]);
-            if (lead && lead.sms_status !== 'completed') {
-              console.log(`[SMS TRIGGER] Disparando SMS para Lead #${targetLead.id} (${lead.phone}) por confirmação de CPC...`);
-              const { triggerN8NSmsWebhook } = require('./services/communication.js');
-              triggerN8NSmsWebhook(lead)
-                .then(smsResult => {
-                  const smsStatus = smsResult.success ? 'completed' : 'failed';
-                  const smsLog = smsResult.success ? `[SMS] Enviado com sucesso via n8n/Unipix.` : smsResult.log;
-                  run('UPDATE leads SET sms_status = ?, sms_log = ? WHERE id = ?', [smsStatus, smsLog, targetLead.id]);
-                })
-                .catch(err => console.error('[SMS TRIGGER ERROR]', err.message));
-            }
-          } else {
-            run("UPDATE leads SET sms_status = 'failed', sms_log = 'Cancelado: Cliente não confirmou a identidade (CPC).' WHERE id = ? AND (sms_status IS NULL OR sms_status = 'pending')", [targetLead.id]);
+        if (shouldSendSms && sendMessages) {
+          const lead = get('SELECT * FROM leads WHERE id = ?', [targetLead.id]);
+          if (lead && lead.sms_status !== 'completed') {
+            console.log(`[SMS TRIGGER] Disparando SMS para Lead #${targetLead.id} (${lead.phone}) por confirmação de CPC...`);
+            const { triggerN8NSmsWebhook } = require('./services/communication.js');
+            triggerN8NSmsWebhook(lead)
+              .then(smsResult => {
+                const smsStatus = smsResult.success ? 'completed' : 'failed';
+                const smsLog = smsResult.success ? `[SMS] Enviado com sucesso via n8n/Unipix.` : smsResult.log;
+                run('UPDATE leads SET sms_status = ?, sms_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [smsStatus, smsLog, targetLead.id]);
+                updateCampaignStats(campaignId);
+              })
+              .catch(err => console.error('[SMS TRIGGER ERROR]', err.message));
           }
+        } else if (!shouldSendSms) {
+          const cancelReason = callStatus === 'completed'
+            ? `Não enviado: Chamada encerrada/desligada antes da confirmação (${occurrence}).`
+            : 'Cancelado: Ligação não atendida.';
+
+          run(
+            `UPDATE leads
+             SET sms_status = 'failed',
+                 sms_log = ?,
+                 email_status = 'failed',
+                 email_log = ?,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?
+               AND (sms_status IS NULL OR sms_status = 'pending' OR email_status IS NULL OR email_status = 'pending')`,
+            [cancelReason, cancelReason, targetLead.id]
+          );
         }
       }
+
+      const oldestCall = calls[calls.length - 1];
+      createdAtLt = oldestCall?.createdAt || null;
+      summary.stoppedAt = createdAtLt;
+
+      if (!createdAtLt || (matchedInPage === 0 && summary.matched > 0)) {
+        break;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    updateCampaignStats(Number(id));
-    res.json({ success: true, restoredCount, message: `Ressincronização concluída! ${restoredCount} chamadas atendidas restauradas.` });
+    updateCampaignStats(campaignId);
+    const updatedCampaign = get('SELECT * FROM campaigns WHERE id = ?', [campaignId]);
+    res.json({
+      success: true,
+      restoredCount: summary.updated,
+      completedCount: summary.completed,
+      failedCount: summary.failed,
+      summary,
+      campaign: updatedCampaign,
+      message: `Ressincronização Vapi concluída: ${summary.updated} leads atualizados (${summary.completed} atendidas, ${summary.failed} não atendidas).`
+    });
   } catch (error) {
+    console.error('[VAPI RESYNC ERROR]', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -552,6 +736,29 @@ app.post('/api/admin/recalculate-stats', (req, res) => {
       updateCampaignStats(c.id);
     }
     res.json({ success: true, message: 'Leads antigos de teste resetados e estatísticas atualizadas com sucesso.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Recalcular estatísticas de uma campanha específica sem alterar status/logs dos leads.
+ */
+app.post('/api/campaigns/:id/recalculate-stats', (req, res) => {
+  const { id } = req.params;
+  try {
+    const campaign = get('SELECT id FROM campaigns WHERE id = ?', [id]);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campanha não encontrada.' });
+    }
+
+    updateCampaignStats(Number(id));
+    const updatedCampaign = get('SELECT * FROM campaigns WHERE id = ?', [id]);
+    res.json({
+      success: true,
+      message: 'Métricas da campanha recalculadas com sucesso.',
+      campaign: updatedCampaign
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -870,7 +1077,7 @@ app.post('/api/leads/update', (req, res) => {
 
     run(
       `UPDATE leads 
-       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, occurrence = ? 
+       SET call_status = ?, call_log = ?, sms_status = ?, sms_log = ?, occurrence = ?, updated_at = CURRENT_TIMESTAMP 
        WHERE id = ?`,
       [newCallStatus, newCallLog, newSmsStatus, newSmsLog, newOccurrence, lead_id]
     );
@@ -1046,9 +1253,16 @@ app.post('/api/vapi-webhook', async (req, res) => {
     // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
     run(
       `UPDATE leads 
-       SET call_status = ?, call_log = ?, occurrence = ?, transcript = ?, recording_url = COALESCE(?, recording_url) 
+       SET call_id = COALESCE(?, call_id),
+           call_status = ?,
+           call_log = ?,
+           occurrence = ?,
+           call_duration = ?,
+           transcript = ?,
+           recording_url = COALESCE(?, recording_url),
+           updated_at = CURRENT_TIMESTAMP 
        WHERE id = ?`,
-      [callStatus, logText, occurrence, transcriptText, recordingUrl, leadId]
+      [call?.id || null, callStatus, logText, occurrence, duration, transcriptText, recordingUrl, leadId]
     );
 
     // Regra de Negócio: Envia SMS APENAS se a fala do CLIENTE (excluindo a pergunta do assistente) contiver confirmação afirmativa
@@ -1085,7 +1299,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
         
         run(
           `UPDATE leads 
-           SET sms_status = ?, sms_log = ?, email_status = ?, email_log = ? 
+           SET sms_status = ?, sms_log = ?, email_status = ?, email_log = ?, updated_at = CURRENT_TIMESTAMP 
            WHERE id = ?`,
           [
             smsStatus, 
@@ -1104,7 +1318,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
       run(
         `UPDATE leads 
-         SET sms_status = 'failed', sms_log = ?, email_status = 'failed', email_log = ? 
+         SET sms_status = 'failed', sms_log = ?, email_status = 'failed', email_log = ?, updated_at = CURRENT_TIMESTAMP 
          WHERE id = ?`,
         [cancelReason, cancelReason, leadId]
       );
