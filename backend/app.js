@@ -235,7 +235,7 @@ app.get('/api/campaigns/:id/export', (req, res) => {
     }
 
     if (filter === 'answered' || callStatus === 'completed') {
-      whereClause += " AND call_status = 'completed'";
+      whereClause += " AND occurrence IS NOT NULL AND occurrence != '' AND occurrence NOT LIKE 'TENTATIVA - %' AND occurrence NOT LIKE '999 - %'";
     }
 
     const query = `SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_status, call_log, sms_status, sms_log, email_status, email_log FROM leads ${whereClause}`;
