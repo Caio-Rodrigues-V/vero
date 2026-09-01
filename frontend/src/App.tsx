@@ -429,7 +429,7 @@ export default function App() {
         fetchStats();
         if (selectedCampaignId) fetchLeads(selectedCampaignId, leadsPage, statusFilter, searchTerm);
       } else {
-        alert('Erro ao destravar campanha');
+        handleRetryFailedCampaign(id);
       }
     } catch (err: any) {
       alert(`Falha na conexão: ${err.message}`);
@@ -767,80 +767,82 @@ export default function App() {
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between lg:col-span-1">
                   <div>
                     <h3 className="text-base font-bold text-slate-800 mb-4">Campanha Ativa</h3>
-                    {campaigns.filter(c => c.status === 'processing').length > 0 ? (
-                      campaigns.filter(c => c.status === 'processing').map(c => {
-                        const pct = Math.round((c.processed_leads / c.total_leads) * 100);
+                    {(() => {
+                      const activeCampaign = campaigns.find(c => c.id === selectedCampaignId) || campaigns.find(c => c.status === 'processing') || campaigns[0];
+                      if (!activeCampaign) {
                         return (
-                          <div key={c.id} className="space-y-4">
-                            <div>
-                              <div className="flex justify-between text-sm mb-1">
-                                <span className="font-semibold text-slate-700">{c.name}</span>
-                                <span className="font-bold text-vero-magenta">{pct}%</span>
-                              </div>
-                              <div className="w-full bg-slate-100 rounded-full h-3">
-                                <div 
-                                  className="bg-vero-magenta h-3 rounded-full transition-all duration-500" 
-                                  style={{ width: `${pct}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-xs text-slate-400 mt-1 block">
-                                {c.processed_leads.toLocaleString()} de {c.total_leads.toLocaleString()} leads enviados
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
-                              <div>
-                                <span className="text-slate-400 block">Ligações Atendidas</span>
-                                <strong className="text-emerald-600 text-base">{c.successful_calls}</strong>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 block">Ligações Não Atendidas</span>
-                                <strong className="text-slate-500 text-base">{c.failed_calls}</strong>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 block">SMS Enviados</span>
-                                <strong className="text-emerald-600 text-base">{c.successful_sms}</strong>
-                              </div>
-                              <div>
-                                <span className="text-slate-400 block">SMS Não Enviados</span>
-                                <strong className="text-slate-500 text-base">{c.failed_sms}</strong>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                              <button 
-                                onClick={() => c.status === 'processing' ? handleCancelCampaign(c.id) : handleStartCampaign(c.id)}
-                                className={`w-1/2 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
-                                  c.status === 'processing' 
-                                    ? 'border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold' 
-                                    : 'bg-green-600 text-white hover:bg-green-700 font-bold'
-                                }`}
-                              >
-                                {c.status === 'processing' ? '⏸️ Pausar' : '▶️ Disparar'}
-                              </button>
-                              <button 
-                                onClick={() => handleRetryFailedCampaign(c.id)}
-                                className="w-1/2 py-2 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-700 transition flex items-center justify-center gap-1"
-                                title="Resetar e rediscar chamadas não atendidas ou com falhas nesta campanha"
-                              >
-                                🔄 Rediscar
-                              </button>
-                            </div>
+                          <div className="text-center py-8 text-slate-400 text-xs">
+                            Nenhuma campanha encontrada. Suba uma planilha para começar.
                           </div>
                         );
-                      })
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
-                        <CheckCircle2 size={36} className="text-slate-300 mb-2" />
-                        <p className="text-sm">Nenhuma campanha em execução no momento.</p>
-                        <button 
-                          onClick={() => setActiveTab('campaigns')}
-                          className="mt-4 text-xs font-semibold text-vero-magenta hover:underline"
-                        >
-                          Criar Nova Campanha →
-                        </button>
-                      </div>
-                    )}
+                      }
+                      const c = activeCampaign;
+                      const pct = Math.round((c.processed_leads / c.total_leads) * 100);
+                      return (
+                        <div key={c.id} className="space-y-4">
+                          <div>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="font-semibold text-slate-700">{c.name}</span>
+                              <span className="font-bold text-vero-magenta">{pct}%</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-3">
+                              <div 
+                                className="bg-vero-magenta h-3 rounded-full transition-all duration-500" 
+                                style={{ width: `${pct}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-xs text-slate-400 mt-1 block">
+                              {c.processed_leads.toLocaleString()} de {c.total_leads.toLocaleString()} leads enviados
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
+                            <div>
+                              <span className="text-slate-400 block">Ligações Atendidas</span>
+                              <strong className="text-emerald-600 text-base">{c.successful_calls}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block">Ligações Não Atendidas</span>
+                              <strong className="text-slate-500 text-base">{c.failed_calls}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block">SMS Enviados</span>
+                              <strong className="text-emerald-600 text-base">{c.successful_sms}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block">SMS Não Enviados</span>
+                              <strong className="text-slate-500 text-base">{c.failed_sms}</strong>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            {c.status === 'processing' ? (
+                              <button 
+                                onClick={() => handleCancelCampaign(c.id)}
+                                className="flex-1 py-2 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-100 transition flex items-center justify-center gap-1 font-bold"
+                              >
+                                ⏸️ Pausar
+                              </button>
+                            ) : (
+                              <button 
+                                onClick={() => handleStartCampaign(c.id)}
+                                className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition flex items-center justify-center gap-1 font-bold"
+                              >
+                                <Play size={14} />
+                                {c.status === 'pending' ? 'Disparar' : 'Continuar'}
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => handleForceUnlock(c.id)}
+                              className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-1 shadow-sm font-bold"
+                            >
+                              <Zap size={14} />
+                              Destravar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Painel do Simulador de n8n no Dashboard */}

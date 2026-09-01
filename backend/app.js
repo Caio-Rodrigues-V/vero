@@ -756,10 +756,10 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     const { dialerProvider, vapiAssistantId, vapiPhoneNumberId } = req.body;
     const provider = (dialerProvider || 'vapi').toLowerCase();
 
-    // 2. Inserir campanha no banco (status inicial como 'pending')
+    // 2. Inserir campanha no banco (status inicial como 'processing' para iniciar disparos imediatamente)
     const campaignResult = run(
       'INSERT INTO campaigns (name, status, dialer_provider, vapi_assistant_id, vapi_phone_number_id, total_leads) VALUES (?, ?, ?, ?, ?, ?)',
-      [campaignName.trim(), 'pending', provider, vapiAssistantId || null, vapiPhoneNumberId || null, leads.length]
+      [campaignName.trim(), 'processing', provider, vapiAssistantId || null, vapiPhoneNumberId || null, leads.length]
     );
     const campaignId = campaignResult.lastInsertRowid;
 
@@ -793,13 +793,17 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
       throw err;
     }
     
-    console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms.`);
+    console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms. Iniciando discador para a campanha #${campaignId}...`);
+
+    // Acionar robô de discagem automaticamente
+    const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
+    triggerCampaignProcessor(campaignId);
 
     res.json({
       success: true,
       campaignId,
       totalLeads: leads.length,
-      message: `Campanha criada com sucesso. Clique em "Disparar" para iniciar os envios.`
+      message: `Campanha criada com sucesso! Discagem iniciada automaticamente.`
     });
 
   } catch (error) {
@@ -1321,7 +1325,7 @@ app.listen(PORT, () => {
   
   // Auto-retomar e destravar campanhas ativas quando o servidor é reiniciado (pm2 restart all)
   try {
-    const activeCampaigns = all("SELECT id FROM campaigns WHERE status IN ('processing', 'paused') ORDER BY id DESC LIMIT 1");
+    const activeCampaigns = all("SELECT id FROM campaigns WHERE status IN ('processing', 'paused', 'pending') ORDER BY id DESC LIMIT 1");
     if (activeCampaigns && activeCampaigns.length > 0) {
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
       console.log(`[AUTO-RESUME] Destravando e retomando discagem da campanha #${activeCampaigns[0].id} automaticamente...`);
