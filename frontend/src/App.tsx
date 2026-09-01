@@ -1272,7 +1272,7 @@ export default function App() {
 
                           {/* Transcrição */}
                           <td className="py-3 px-4">
-                            {l.call_status === 'completed' ? (
+                            {(l.call_id || l.transcript) ? (
                               <button
                                 onClick={() => handleOpenTranscriptModal(l)}
                                 className="px-2 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded text-[10px] font-bold hover:bg-purple-100 transition flex items-center gap-1"
@@ -1287,9 +1287,9 @@ export default function App() {
 
                           {/* Áudio Gravado */}
                           <td className="py-3 px-4">
-                            {(l.call_status === 'completed' && (l.recording_url || l.call_id)) ? (
+                            {(l.call_id || l.recording_url) ? (
                               <a
-                                href={`${BACKEND_URL}/api/leads/${l.id}/audio`}
+                                href={`${BACKEND_URL}/api/leads/${l.id}/audio?t=${Date.now()}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="px-2 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[10px] font-bold hover:bg-sky-100 transition inline-flex items-center gap-1"
