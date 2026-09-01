@@ -1,7 +1,7 @@
 const { run, get } = require('../db.js');
 const { triggerN8NSmsWebhook } = require('./communication.js');
 const { updateCampaignStats } = require('./stats.js');
-const { classifyCallOccurrence, validCpcOccurrences } = require('../utils/classifier.js');
+const { classifyCallOccurrence } = require('../utils/classifier.js');
 
 /**
  * Disparar ligação de cobrança via Retell AI API
@@ -168,32 +168,27 @@ async function handleRetellWebhook(eventData) {
       [finalCallStatus, durationSeconds, transcript, occurrenceText, recordingUrl, lead.id]
     );
 
-    // Se a chamada foi concluída e qualificou na regra CPC de envio de SMS
-    const isCpcConfirmed = finalCallStatus === 'completed' && validCpcOccurrences.includes(occurrenceText);
-
-    if (isCpcConfirmed) {
-      console.log(`[RETELL WEBHOOK] Processando envio de SMS para Lead #${lead.id}...`);
+    // Nova regra: se a chamada foi atendida, envia SMS mesmo sem CPC.
+    if (finalCallStatus === 'completed') {
+      console.log(`[RETELL WEBHOOK] Processando envio de SMS para Lead #${lead.id} por chamada atendida...`);
       const smsResult = await triggerN8NSmsWebhook(lead).catch(err => ({ success: false, log: `[RETELL SMS ERROR] ${err.message}` }));
       const smsStatus = smsResult.success ? 'completed' : 'failed';
       run(
         `UPDATE leads 
-         SET sms_status = ?, sms_log = ? 
+         SET sms_status = ?, sms_log = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
         [
           smsStatus, 
-          smsResult.success ? `[SMS] Enviado com sucesso para o celular do titular.` : smsResult.log, 
+          smsResult.success ? `[SMS] Enviado com sucesso: chamada atendida.` : smsResult.log,
           lead.id
         ]
       );
     } else {
-      // Se a ligação caiu, desligou ou não formalizou a confirmação, marca SMS como Não Enviado
-      const cancelReason = finalCallStatus === 'completed' 
-        ? `Não enviado: Chamada encerrada/desligada antes da confirmação (${occurrenceText}).` 
-        : `Não enviado: Chamada falhou (${disconnectionReason}).`;
+      const cancelReason = `Não enviado: Chamada falhou (${disconnectionReason}).`;
       
       run(
         `UPDATE leads 
-         SET sms_status = 'failed', sms_log = ? 
+         SET sms_status = 'failed', sms_log = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
         [cancelReason, lead.id]
       );

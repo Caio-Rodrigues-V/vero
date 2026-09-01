@@ -459,6 +459,37 @@ function getVapiDurationSeconds(call) {
   return 0;
 }
 
+function getVapiEndedReason(call, message = null) {
+  return (
+    message?.endedReason ||
+    message?.ended_reason ||
+    message?.call?.endedReason ||
+    message?.call?.ended_reason ||
+    call?.endedReason ||
+    call?.ended_reason ||
+    'sem_motivo'
+  );
+}
+
+function getVapiMessages(call) {
+  return call?.artifact?.messages || call?.messages || call?.artifact?.messagesOpenAIFormatted || [];
+}
+
+function hasVapiCustomerSpeech(call, transcript = '') {
+  const messages = getVapiMessages(call);
+  if (Array.isArray(messages) && messages.length > 0) {
+    return messages.some(m => {
+      const role = String(m?.role || '').toLowerCase();
+      const text = String(m?.message || m?.content || m?.text || '').trim();
+      return (role === 'user' || role === 'customer' || role === 'cliente') && text.length > 0;
+    });
+  }
+
+  return String(transcript || '')
+    .split('\n')
+    .some(line => /^(user|customer|cliente)\s*:/i.test(line.trim()) && line.replace(/^[^:]+:/, '').trim().length > 0);
+}
+
 function isVapiExplicitFailure(endedReason) {
   const reason = String(endedReason || '').toLowerCase();
   return reason.includes('voicemail') ||
@@ -467,17 +498,20 @@ function isVapiExplicitFailure(endedReason) {
     reason.includes('no-answer') ||
     reason.includes('busy') ||
     reason.includes('failed-to-connect') ||
+    reason.includes('providerfault') ||
+    reason.includes('request-timeout') ||
     reason.includes('sip-outbound-call-failed');
 }
 
 function isVapiAnsweredCall(call, transcript, duration) {
-  const reason = String(call?.endedReason || call?.ended_reason || '').toLowerCase();
-  const isSilenceOrCustomer = reason.includes('silence') ||
+  const reason = String(getVapiEndedReason(call) || '').toLowerCase();
+  const isConnectedEnd = reason.includes('silence') ||
     (reason.includes('customer') && !reason.includes('did-not-answer') && !reason.includes('busy')) ||
     reason.includes('assistant-completed-task') ||
-    reason.includes('assistant-ended-call');
+    reason.includes('assistant-ended-call') ||
+    reason.includes('sip-completed-call');
 
-  return !isVapiExplicitFailure(reason) && (isSilenceOrCustomer || duration > 0 || Boolean(transcript));
+  return !isVapiExplicitFailure(reason) && (isConnectedEnd || duration > 0 || hasVapiCustomerSpeech(call, transcript));
 }
 
 function vapiCallBelongsToCampaign(call, campaign, campaignId) {
@@ -560,8 +594,11 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
       updated: 0,
       completed: 0,
       failed: 0,
+      withCustomerSpeech: 0,
+      connectedWithoutCustomerSpeech: 0,
       skippedOpen: 0,
       skippedNoLead: 0,
+      byEndedReason: {},
       pages: 0,
       stoppedAt: null
     };
@@ -607,11 +644,12 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
         }
 
         const callId = c.id;
-        const endedReason = c.endedReason || c.ended_reason || 'sem_motivo';
+        const endedReason = getVapiEndedReason(c);
         const transcript = getVapiTranscript(c);
         const recordingUrl = getVapiRecordingUrl(c);
         const duration = getVapiDurationSeconds(c);
         const callStatus = isVapiAnsweredCall(c, transcript, duration) ? 'completed' : 'failed';
+        const customerSpoke = hasVapiCustomerSpeech(c, transcript);
         const occurrence = classifyCallOccurrence({
           endedReason,
           summary: c.summary || c.analysis?.summary || c.artifact?.summary,
@@ -645,6 +683,9 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
         summary.updated++;
         if (callStatus === 'completed') summary.completed++;
         if (callStatus === 'failed') summary.failed++;
+        if (customerSpoke) summary.withCustomerSpeech++;
+        if (callStatus === 'completed' && !customerSpoke) summary.connectedWithoutCustomerSpeech++;
+        summary.byEndedReason[endedReason] = (summary.byEndedReason[endedReason] || 0) + 1;
 
         const customerSpeech = normalizeText(extractCustomerSpeech(transcript));
         const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|alo|isso|confirmo|exato|esta|e ela|e ele|eu mesma|eu mesmo|palestine|posso ajudar)\b/i.test(customerSpeech);
@@ -652,13 +693,15 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
           const funcName = m.toolCalls?.[0]?.function?.name || m.name || '';
           return String(funcName).toLowerCase().includes('sms');
         });
-        const shouldSendSms = callStatus === 'completed' &&
-          (validCpcOccurrences.includes(occurrence) || (isAffirmativeCpc && customerSpeech.trim().length > 0) || hasSmsToolCallInMessages);
+        const shouldSendSms = callStatus === 'completed';
+        const smsReason = validCpcOccurrences.includes(occurrence) || (isAffirmativeCpc && customerSpeech.trim().length > 0) || hasSmsToolCallInMessages
+          ? 'confirmação/CPC'
+          : 'chamada atendida';
 
         if (shouldSendSms && sendMessages) {
           const lead = get('SELECT * FROM leads WHERE id = ?', [targetLead.id]);
           if (lead && lead.sms_status !== 'completed') {
-            console.log(`[SMS TRIGGER] Disparando SMS para Lead #${targetLead.id} (${lead.phone}) por confirmação de CPC...`);
+            console.log(`[SMS TRIGGER] Disparando SMS para Lead #${targetLead.id} (${lead.phone}) por ${smsReason}...`);
             const { triggerN8NSmsWebhook } = require('./services/communication.js');
             triggerN8NSmsWebhook(lead)
               .then(smsResult => {
@@ -670,9 +713,7 @@ app.post('/api/campaigns/:id/resync-vapi', async (req, res) => {
               .catch(err => console.error('[SMS TRIGGER ERROR]', err.message));
           }
         } else if (!shouldSendSms) {
-          const cancelReason = callStatus === 'completed'
-            ? `Não enviado: Chamada encerrada/desligada antes da confirmação (${occurrence}).`
-            : 'Cancelado: Ligação não atendida.';
+          const cancelReason = 'Cancelado: Ligação não atendida.';
 
           run(
             `UPDATE leads
@@ -1193,13 +1234,17 @@ app.post('/api/vapi-webhook', async (req, res) => {
     leadId = targetLead.id;
     const campaignId = targetLead.campaign_id || metadata?.campaign_id;
 
-    const endedReason = call?.endedReason || call?.ended_reason || 'erro_sintetizacao_voz';
+    const endedReason = getVapiEndedReason(call, message);
 
     console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId} (Campanha #${campaignId}). Motivo: ${endedReason}`);
 
-    // Regra do Faraó: Classificar SILENCE e CUSTOMER (sem ser did-not-answer ou busy) como ATENDIDAS (completed/verde)
-    const lowerReason = String(endedReason || '').toLowerCase();
-    const duration = Number(call?.duration || message?.duration || 0);
+    // Regra: classificar como atendida somente quando a Vapi indicar chamada conectada.
+    const duration = getVapiDurationSeconds({
+      ...(call || {}),
+      duration: call?.duration || message?.duration,
+      startedAt: call?.startedAt || message?.startedAt,
+      endedAt: call?.endedAt || message?.endedAt
+    });
 
     let transcriptText = 
       message?.transcript || 
@@ -1226,19 +1271,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
       call?.artifact?.recordingUrl || 
       null;
 
-    const isExplicitFailed = lowerReason.includes('voicemail') ||
-                             lowerReason.includes('customer-did-not-answer') || 
-                             lowerReason.includes('customer-busy') || 
-                             lowerReason.includes('no-answer') || 
-                             lowerReason.includes('busy') || 
-                             lowerReason.includes('failed-to-connect');
-
-    const isSilenceOrCustomer = lowerReason.includes('silence') || 
-                               (lowerReason.includes('customer') && !lowerReason.includes('did-not-answer') && !lowerReason.includes('busy')) ||
-                               lowerReason.includes('assistant-completed-task') ||
-                               lowerReason.includes('assistant-ended-call');
-
-    const isSuccess = !isExplicitFailed && (isSilenceOrCustomer || duration > 0 || Boolean(transcriptText));
+    const isSuccess = isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration);
     const callStatus = isSuccess ? 'completed' : 'failed';
     const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
     
@@ -1265,13 +1298,17 @@ app.post('/api/vapi-webhook', async (req, res) => {
       [call?.id || null, callStatus, logText, occurrence, duration, transcriptText, recordingUrl, leadId]
     );
 
-    // Regra de Negócio: Envia SMS APENAS se a fala do CLIENTE (excluindo a pergunta do assistente) contiver confirmação afirmativa
+    // Regra de Negócio: se a pessoa atendeu, envia SMS mesmo sem confirmação CPC.
     const customerSpeechOnly = normalizeText(extractCustomerSpeech(transcriptText));
     const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|alô|alo|isso|confirmo|exato|esta|é ela|e ela|é ele|e ele|eu mesma|eu mesmo|palestine|posso ajudar)\b/i.test(customerSpeechOnly);
-    const isCpcConfirmed = (callStatus === 'completed' || Number(call?.duration || 0) > 0) && 
-      (validCpcOccurrences.includes(occurrence) || (isAffirmativeCpc && customerSpeechOnly.trim().length > 0));
+    const hasSmsToolCallInMessages = Array.isArray(message?.artifact?.messages) && message.artifact.messages.some(m => {
+      const funcName = m.toolCalls?.[0]?.function?.name || m.name || '';
+      return String(funcName).toLowerCase().includes('sms');
+    });
+    const isCpcConfirmed = validCpcOccurrences.includes(occurrence) || (isAffirmativeCpc && customerSpeechOnly.trim().length > 0) || hasSmsToolCallInMessages;
+    const shouldSendSms = callStatus === 'completed';
 
-    if (isCpcConfirmed) {
+    if (shouldSendSms) {
       const lead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
       if (lead) {
         const { triggerN8NSmsWebhook, sendLocawebEmail } = require('./services/communication.js');
@@ -1283,18 +1320,26 @@ app.post('/api/vapi-webhook', async (req, res) => {
         if (lead.sms_status !== 'completed') {
           const smsResult = await triggerN8NSmsWebhook(lead);
           smsStatus = smsResult.success ? 'completed' : 'failed';
-          smsLogText = smsResult.success ? `[SMS] Enviado com sucesso para o celular do titular.` : smsResult.log;
+          smsLogText = smsResult.success
+            ? `[SMS] Enviado com sucesso: chamada atendida${isCpcConfirmed ? ' com confirmação/CPC' : ''}.`
+            : smsResult.log;
         } else {
           console.log(`[VAPI WEBHOOK] SMS do Lead #${leadId} já foi enviado em tempo real. Ignorando reenvio.`);
         }
         
-        // 2. Disparar E-mail se houver e-mail cadastrado ou se houver e-mail de teste (.env)
-        let emailStatus = 'completed';
-        let emailLog = 'Não enviado: Lead sem e-mail cadastrado.';
-        if ((lead.email && lead.email.includes('@')) || process.env.TEST_EMAIL) {
+        // 2. E-mail segue restrito a CPC/ocorrências qualificadas; a regra nova é apenas SMS.
+        let emailStatus = lead.email_status || 'pending';
+        let emailLog = lead.email_log || null;
+        if (isCpcConfirmed && ((lead.email && lead.email.includes('@')) || process.env.TEST_EMAIL)) {
           const emailResult = await sendLocawebEmail(lead);
           emailStatus = emailResult.success ? 'completed' : 'failed';
           emailLog = emailResult.log;
+        } else if (!isCpcConfirmed) {
+          emailStatus = 'failed';
+          emailLog = `Não enviado: chamada atendida sem confirmação CPC (${occurrence}).`;
+        } else {
+          emailStatus = 'completed';
+          emailLog = 'Não enviado: Lead sem e-mail cadastrado.';
         }
         
         run(
@@ -1311,10 +1356,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
         );
       }
     } else {
-      // Se a ligação caiu, desligou ou não formalizou a confirmação, marca SMS e E-mail como Não Enviados
-      const cancelReason = callStatus === 'completed' 
-        ? `Não enviado: Chamada encerrada/desligada antes da confirmação (${occurrence}).` 
-        : 'Cancelado: Ligação não atendida.';
+      const cancelReason = 'Cancelado: Ligação não atendida.';
 
       run(
         `UPDATE leads 
