@@ -137,8 +137,40 @@ async function makeVapiCall(lead) {
     console.error('[VAPI] Erro ao buscar dados da campanha no banco:', err.message);
   }
 
-  const finalAssistantId = campaignAssistantId || assistantId;
-  const finalPhoneNumberId = campaignPhoneNumberId || phoneNumberId;
+  let finalAssistantId = campaignAssistantId || assistantId;
+  let finalPhoneNumberId = campaignPhoneNumberId || phoneNumberId;
+
+  const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  if (!isUuid(finalAssistantId) && apiKey) {
+    try {
+      const astRes = await fetch('https://api.vapi.ai/assistant', {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      });
+      if (astRes.ok) {
+        const asts = await astRes.json();
+        if (asts.length > 0 && asts[0].id) {
+          finalAssistantId = asts[0].id;
+          console.log(`[VAPI RESOLVE] Usando assistente Vapi automático: ${finalAssistantId} (${asts[0].name})`);
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!isUuid(finalPhoneNumberId) && apiKey) {
+    try {
+      const pnRes = await fetch('https://api.vapi.ai/phone-number', {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      });
+      if (pnRes.ok) {
+        const pns = await pnRes.json();
+        if (pns.length > 0 && pns[0].id) {
+          finalPhoneNumberId = pns[0].id;
+          console.log(`[VAPI RESOLVE] Usando linha telefônica Vapi automática: ${finalPhoneNumberId}`);
+        }
+      }
+    } catch (e) {}
+  }
 
   // Implementar Modo de Teste: Redireciona para o número de teste se TEST_PHONE estiver no .env
   const targetPhone = process.env.TEST_PHONE || lead.phone;
