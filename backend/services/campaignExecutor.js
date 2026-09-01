@@ -7,8 +7,12 @@ const activeJobs = new Set();
 /**
  * Processa o envio de leads: Ligação pela VAPI ou Retell AI
  */
-async function processCampaign(campaignId) {
-  if (activeJobs.has(campaignId)) return;
+async function processCampaign(campaignId, force = false) {
+  if (force) {
+    activeJobs.delete(campaignId);
+  } else if (activeJobs.has(campaignId)) {
+    return;
+  }
   activeJobs.add(campaignId);
 
   const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '10000', 10);
@@ -150,7 +154,14 @@ async function processCampaign(campaignId) {
 /**
  * Aciona o processador para verificar se há campanhas com leads pendentes
  */
-function triggerCampaignProcessor() {
+function triggerCampaignProcessor(campaignIdToForce = null) {
+  if (campaignIdToForce) {
+    // Resetar leads presos em 'calling' para 'pending' ao disparar manualmente
+    run("UPDATE leads SET call_status = 'pending' WHERE campaign_id = ? AND call_status = 'calling'", [campaignIdToForce]);
+    processCampaign(campaignIdToForce, true);
+    return;
+  }
+
   const processingCampaigns = all("SELECT id FROM campaigns WHERE status = 'processing'");
   for (const row of processingCampaigns) {
     const pendingCount = get("SELECT COUNT(id) as count FROM leads WHERE campaign_id = ? AND call_status = 'pending'", [row.id]);

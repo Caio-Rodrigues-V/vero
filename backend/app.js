@@ -306,7 +306,7 @@ app.post('/api/campaigns/:id/start', (req, res) => {
       run("UPDATE campaigns SET status = 'processing' WHERE id = ?", [id]);
       // Executa a função assíncrona de processamento em background
       const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
-      triggerCampaignProcessor();
+      triggerCampaignProcessor(Number(id));
       res.json({ success: true, message: 'Disparos da campanha iniciados/retomados com sucesso.' });
     } else {
       res.status(400).json({ error: 'Apenas campanhas pendentes ou pausadas podem ser iniciadas.' });
