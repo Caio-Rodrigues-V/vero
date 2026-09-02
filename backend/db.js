@@ -91,6 +91,7 @@ function initDb() {
       campaign_id INTEGER NOT NULL,
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
+      cpf TEXT,
       debt_value REAL NOT NULL,
       due_date TEXT,
       barcode TEXT, -- Linha Digitável / Código de barras / PIX
@@ -116,6 +117,7 @@ function initDb() {
 
   // Migrações para a tabela leads
   safeAddColumn('leads', 'barcode TEXT');
+  safeAddColumn('leads', 'cpf TEXT');
   safeAddColumn('leads', 'dias_atraso INTEGER');
   safeAddColumn('leads', 'status_internet TEXT');
   safeAddColumn('leads', 'occurrence TEXT');

@@ -37,19 +37,20 @@ function generateCleanCsv() {
   }
 
   const leads = all(
-    "SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_log FROM leads WHERE campaign_id = ? AND call_status = 'completed'", 
+    "SELECT name, phone, cpf, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_log FROM leads WHERE campaign_id = ? AND call_status = 'completed'",
     [campaign.id]
   );
 
   console.log(`Leads encontrados para campanha #${campaign.id}: ${leads.length}`);
 
-  let csvContent = '\uFEFFNome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Contrato,Status Ligacao\r\n';
+  let csvContent = '\uFEFFNome,Telefone,CPF,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Contrato,Status Ligacao\r\n';
 
   for (const lead of leads) {
     const cleanOccurrence = formatOccurrenceLabel(lead.occurrence, lead.call_log);
     const row = [
       `"${(lead.name || '').replace(/"/g, '""')}"`,
       `"${lead.phone}"`,
+      `"${lead.cpf || ''}"`,
       `"${lead.email || ''}"`,
       lead.debt_value,
       `"${lead.due_date || ''}"`,

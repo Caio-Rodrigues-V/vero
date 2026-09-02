@@ -45,6 +45,24 @@ function cleanPhone(phone) {
 }
 
 /**
+ * Normaliza CPF/CNPJ da planilha preservando zeros à esquerda quando possível.
+ */
+function cleanCpf(value) {
+  if (value === null || value === undefined) return '';
+  let str = String(value).trim();
+
+  if (/e/i.test(str)) {
+    const normalized = str.replace(',', '.');
+    const num = Number(normalized);
+    if (!isNaN(num)) {
+      str = num.toFixed(0);
+    }
+  }
+
+  return str.replace(/\D/g, '');
+}
+
+/**
  * Converte valor de texto para float
  */
 function cleanDebtValue(val) {
@@ -104,6 +122,19 @@ function parseRow(row) {
   });
   if (nameKey && row[nameKey]) {
     name = String(row[nameKey]).trim();
+  }
+
+  // 1.1 Encontrar CPF/CNPJ do cliente
+  let cpf = '';
+  const cpfKey = Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk === 'cpf' || hk === 'cnpj' || hk === 'cpf_cnpj' || hk === 'cpf/cnpj' || hk === 'documento' || hk === 'document';
+  }) || Object.keys(row).find(k => {
+    const hk = k.toLowerCase().trim();
+    return hk.includes('cpf') || hk.includes('cnpj') || hk.includes('documento');
+  });
+  if (cpfKey && row[cpfKey]) {
+    cpf = cleanCpf(row[cpfKey]);
   }
 
   // 2. Encontrar o valor do débito (saldo/valor/divida/debito/nominal)
@@ -195,7 +226,7 @@ function parseRow(row) {
     email = String(row[emailKey]).trim();
   }
 
-  return { name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, email };
+  return { name, phone, cpf, debt_value, due_date, barcode, dias_atraso, status_internet, email };
 }
 
 /**

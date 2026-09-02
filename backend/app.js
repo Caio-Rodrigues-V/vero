@@ -289,16 +289,17 @@ app.get('/api/campaigns/:id/export', (req, res) => {
       whereClause += " AND call_status = 'completed'";
     }
 
-    const query = `SELECT name, phone, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_log FROM leads ${whereClause}`;
+    const query = `SELECT name, phone, cpf, email, debt_value, due_date, barcode, dias_atraso, status_internet, occurrence, call_log FROM leads ${whereClause}`;
     const leads = all(query, params);
 
-    let csvContent = '\uFEFFNome,Telefone,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Contrato,Status Ligacao\r\n';
+    let csvContent = '\uFEFFNome,Telefone,CPF,Email,Valor Divida,Data Vencimento,Linha Digitavel,Dias Atraso,Status Contrato,Status Ligacao\r\n';
     
     for (const lead of leads) {
       const cleanOccurrence = formatOccurrenceLabel(lead.occurrence, lead.call_log);
       const row = [
         `"${(lead.name || '').replace(/"/g, '""')}"`,
         `"${lead.phone}"`,
+        `"${lead.cpf || ''}"`,
         `"${lead.email || ''}"`,
         lead.debt_value,
         `"${lead.due_date || ''}"`,
@@ -1031,8 +1032,8 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
 
     // 3. Inserir os leads em lote usando transação nativa para alta performance (suporta 20k+ facilmente)
     const insertLeadStmt = db.prepare(`
-      INSERT INTO leads (campaign_id, name, phone, debt_value, due_date, barcode, dias_atraso, status_internet, email) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO leads (campaign_id, name, phone, cpf, debt_value, due_date, barcode, dias_atraso, status_internet, email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     console.log(`[SERVER] Inserindo ${leads.length} leads no banco de dados para a campanha #${campaignId}...`);
@@ -1045,6 +1046,7 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
           campaignId, 
           lead.name, 
           lead.phone, 
+          lead.cpf || null,
           lead.debt_value, 
           lead.due_date, 
           lead.barcode || null,
@@ -1088,11 +1090,11 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
  */
 app.get('/api/sample-file', (req, res) => {
   const sampleData = [
-    { Nome: 'Carlos Silva', Telefone: '11999998888', Valor: 150.90, Vencimento: '10/08/2026' },
-    { Nome: 'Mariana Souza', Telefone: '21988887777', Valor: 220.00, Vencimento: '15/08/2026' },
-    { Nome: 'Joao Oliveira', Telefone: '31977776666', Valor: 89.90, Vencimento: '05/08/2026' },
-    { Nome: 'Beatriz Costa', Telefone: '11966665555', Valor: 450.50, Vencimento: '20/08/2026' },
-    { Nome: 'Pedro Santos', Telefone: '11955554444', Valor: 120.00, Vencimento: '12/08/2026' }
+    { Nome: 'Carlos Silva', CPF: '12345678901', Telefone: '11999998888', Valor: 150.90, Vencimento: '10/08/2026' },
+    { Nome: 'Mariana Souza', CPF: '23456789012', Telefone: '21988887777', Valor: 220.00, Vencimento: '15/08/2026' },
+    { Nome: 'Joao Oliveira', CPF: '34567890123', Telefone: '31977776666', Valor: 89.90, Vencimento: '05/08/2026' },
+    { Nome: 'Beatriz Costa', CPF: '45678901234', Telefone: '11966665555', Valor: 450.50, Vencimento: '20/08/2026' },
+    { Nome: 'Pedro Santos', CPF: '56789012345', Telefone: '11955554444', Valor: 120.00, Vencimento: '12/08/2026' }
   ];
 
   const wb = xlsx.utils.book_new();
