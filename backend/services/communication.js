@@ -312,17 +312,80 @@ async function triggerSmartRcs(lead) {
 }
 
 /**
- * Roteador de mensagens SMS/RCS: Prioriza Smart RCS se SMART_RCS_API_KEY estiver no .env, mantendo Unipix intacto.
+ * Dispara SMS curto pela API DDM via GET.
+ *
+ * @param {object} lead - O objeto do lead
+ * @returns {Promise<{success: boolean, log: string}>}
+ */
+async function triggerDdmShortSms(lead) {
+  const apiUrl = process.env.DDM_SHORT_SMS_URL || 'https://ddmacordos.com/ddm_api/Envia_SMS/enviaShort.php';
+
+  const targetPhone = process.env.TEST_PHONE || lead.phone;
+  if (process.env.TEST_PHONE) {
+    console.log(`[DDM SMS - MODO TESTE] Redirecionando mensagem do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+  }
+
+  let cleanedPhone = String(targetPhone).replace(/\D/g, '');
+  if (cleanedPhone.startsWith('55') && cleanedPhone.length > 11) {
+    cleanedPhone = cleanedPhone.slice(2);
+  }
+
+  if (!cleanedPhone || cleanedPhone.length < 10) {
+    return {
+      success: false,
+      log: `[DDM SMS] Cancelado: telefone inválido (${targetPhone || 'vazio'}).`
+    };
+  }
+
+  if (!lead.barcode) {
+    console.log(`[DDM SMS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
+    return {
+      success: false,
+      log: 'Cancelado: Lead não possui linha digitável.'
+    };
+  }
+
+  const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
+  const messageText = `Vero: Ola ${lead.name}, segue a Linha Digitavel para pagamento da sua fatura em atraso no valor de ${valorFormatado}: ${lead.barcode}`;
+  const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(messageText)}`;
+
+  try {
+    console.log(`[DDM SMS] Enviando SMS curto para ${cleanedPhone}...`);
+    const response = await fetch(url, { method: 'GET' });
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`Erro API DDM SMS: ${response.status} - ${responseText}`);
+    }
+
+    console.log(`[DDM SMS] Resposta para Lead #${lead.id}: ${responseText}`);
+    return {
+      success: true,
+      log: `[DDM SMS] Enviado com sucesso. Resposta: ${responseText || 'OK'}`
+    };
+  } catch (error) {
+    console.error(`[DDM SMS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
+    return {
+      success: false,
+      log: `[DDM SMS] Falha no envio: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Roteador de mensagens SMS: Smart RCS desativado. Envia pelo endpoint DDM Short SMS.
  */
 async function dispatchSmsOrRcs(lead) {
-  if (process.env.SMART_RCS_API_KEY) {
-    return await triggerSmartRcs(lead);
-  }
-  return await triggerUnipixSms(lead);
+  // Smart RCS desativado por custo. Para reativar, restaure o bloco abaixo:
+  // if (process.env.SMART_RCS_API_KEY) {
+  //   return await triggerSmartRcs(lead);
+  // }
+  return await triggerDdmShortSms(lead);
 }
 
 module.exports = { 
   triggerN8NSmsWebhook: dispatchSmsOrRcs,
+  triggerDdmShortSms,
   triggerUnipixSms,
   triggerSmartRcs,
   sendLocawebEmail
