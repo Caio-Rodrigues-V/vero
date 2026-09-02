@@ -1,6 +1,26 @@
 const dotenv = require('dotenv');
 dotenv.config();
 
+const MINHA_VERO_APP_LINKS = [
+  'iPhone: https://apps.apple.com/br/app/minha-vero/id1500068558',
+  'Android: https://play.google.com/store/apps/details?id=com.vero_mobile&pcampaignid=web_share'
+].join('\n');
+
+function buildPaymentMessage(lead, valorFormatado) {
+  return `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}\n\nBaixe o app Minha Vero:\n${MINHA_VERO_APP_LINKS}`;
+}
+
+function limitSmsMessage(text) {
+  return String(text).replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+function buildDdmShortMessage(lead, valorFormatado) {
+  if (lead.barcode) {
+    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${lead.barcode}`);
+  }
+  return limitSmsMessage(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
+}
+
 /**
  * Dispara a mensagem SMS diretamente usando a API da Unipix.
  * 
@@ -47,7 +67,7 @@ async function triggerUnipixSms(lead) {
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
   
   // Mensagem padronizada da Vero para envio de boleto
-  const messageText = `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}`;
+  const messageText = buildPaymentMessage(lead, valorFormatado);
 
   try {
     console.log(`[Unipix SMS] Enviando mensagem para ${cleanedPhone}...`);
@@ -257,7 +277,7 @@ async function triggerSmartRcs(lead) {
   }
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
-  const messageText = `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}`;
+  const messageText = buildPaymentMessage(lead, valorFormatado);
 
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -338,9 +358,7 @@ async function triggerDdmShortSms(lead) {
   }
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
-  const messageText = lead.barcode
-    ? `Vero: Ola ${lead.name}, segue a Linha Digitavel para pagamento da sua fatura em atraso no valor de ${valorFormatado}: ${lead.barcode}`
-    : `Vero: Ola ${lead.name}, obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
+  const messageText = buildDdmShortMessage(lead, valorFormatado);
   const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(messageText)}`;
 
   try {
@@ -367,13 +385,10 @@ async function triggerDdmShortSms(lead) {
 }
 
 /**
- * Roteador de mensagens SMS/RCS: Prioriza Smart RCS se SMART_RCS_API_KEY estiver no .env, mantendo Unipix intacto.
+ * Roteador de mensagens SMS: usa a API curta da DDM como canal principal.
  */
 async function dispatchSmsOrRcs(lead) {
-  if (process.env.SMART_RCS_API_KEY) {
-    return await triggerSmartRcs(lead);
-  }
-  return await triggerUnipixSms(lead);
+  return await triggerDdmShortSms(lead);
 }
 
 module.exports = { 
