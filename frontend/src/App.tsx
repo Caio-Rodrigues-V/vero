@@ -16,7 +16,6 @@ import {
   ChevronRight,
   Sparkles,
   MessageSquare,
-  Volume2,
   X,
   Filter,
   Zap
@@ -1273,7 +1272,6 @@ export default function App() {
                       <th className="py-3 px-4">Ocorrência (Tabulação)</th>
                       <th className="py-3 px-4">Status VAPI (Ligação)</th>
                       <th className="py-3 px-4">Transcrição</th>
-                      <th className="py-3 px-4">Áudio Gravado</th>
                       <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status SMS</th>
                       <th className="py-3 px-4">Log do SMS</th>
@@ -1337,23 +1335,6 @@ export default function App() {
                               </button>
                             ) : (
                               <span className="text-slate-300 text-[10px] italic">Sem texto</span>
-                            )}
-                          </td>
-
-                          {/* Áudio Gravado */}
-                          <td className="py-3 px-4">
-                            {(l.call_id || l.recording_url) ? (
-                              <a
-                                href={`${BACKEND_URL}/api/leads/${l.id}/audio?t=${Date.now()}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[10px] font-bold hover:bg-sky-100 transition inline-flex items-center gap-1"
-                              >
-                                <Volume2 size={12} />
-                                Ouvir Áudio
-                              </a>
-                            ) : (
-                              <span className="text-slate-300 text-[10px] italic">Sem gravação</span>
                             )}
                           </td>
 
