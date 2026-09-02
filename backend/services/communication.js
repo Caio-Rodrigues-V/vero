@@ -367,26 +367,13 @@ async function triggerDdmShortSms(lead) {
 }
 
 /**
- * Roteador de mensagens SMS: tenta DDM Short SMS primeiro e usa Smart RCS como fallback.
+ * Roteador de mensagens SMS/RCS: Prioriza Smart RCS se SMART_RCS_API_KEY estiver no .env, mantendo Unipix intacto.
  */
 async function dispatchSmsOrRcs(lead) {
-  const ddmResult = await triggerDdmShortSms(lead);
-  if (ddmResult.success) {
-    return ddmResult;
-  }
-
   if (process.env.SMART_RCS_API_KEY) {
-    console.warn(`[SMS FALLBACK] DDM falhou para Lead #${lead.id}. Tentando Smart RCS... Motivo: ${ddmResult.log}`);
-    const rcsResult = await triggerSmartRcs(lead);
-    return {
-      success: rcsResult.success,
-      log: rcsResult.success
-        ? `${ddmResult.log} | Fallback Smart RCS enviado: ${rcsResult.log}`
-        : `${ddmResult.log} | Fallback Smart RCS falhou: ${rcsResult.log}`
-    };
+    return await triggerSmartRcs(lead);
   }
-
-  return ddmResult;
+  return await triggerUnipixSms(lead);
 }
 
 module.exports = { 
