@@ -367,14 +367,26 @@ async function triggerDdmShortSms(lead) {
 }
 
 /**
- * Roteador de mensagens SMS: Smart RCS desativado. Envia pelo endpoint DDM Short SMS.
+ * Roteador de mensagens SMS: tenta DDM Short SMS primeiro e usa Smart RCS como fallback.
  */
 async function dispatchSmsOrRcs(lead) {
-  // Smart RCS desativado por custo. Para reativar, restaure o bloco abaixo:
-  // if (process.env.SMART_RCS_API_KEY) {
-  //   return await triggerSmartRcs(lead);
-  // }
-  return await triggerDdmShortSms(lead);
+  const ddmResult = await triggerDdmShortSms(lead);
+  if (ddmResult.success) {
+    return ddmResult;
+  }
+
+  if (process.env.SMART_RCS_API_KEY) {
+    console.warn(`[SMS FALLBACK] DDM falhou para Lead #${lead.id}. Tentando Smart RCS... Motivo: ${ddmResult.log}`);
+    const rcsResult = await triggerSmartRcs(lead);
+    return {
+      success: rcsResult.success,
+      log: rcsResult.success
+        ? `${ddmResult.log} | Fallback Smart RCS enviado: ${rcsResult.log}`
+        : `${ddmResult.log} | Fallback Smart RCS falhou: ${rcsResult.log}`
+    };
+  }
+
+  return ddmResult;
 }
 
 module.exports = { 
