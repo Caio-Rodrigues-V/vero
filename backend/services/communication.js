@@ -337,16 +337,10 @@ async function triggerDdmShortSms(lead) {
     };
   }
 
-  if (!lead.barcode) {
-    console.log(`[DDM SMS] Lead #${lead.id} não possui linha digitável. Abortando envio.`);
-    return {
-      success: false,
-      log: 'Cancelado: Lead não possui linha digitável.'
-    };
-  }
-
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
-  const messageText = `Vero: Ola ${lead.name}, segue a Linha Digitavel para pagamento da sua fatura em atraso no valor de ${valorFormatado}: ${lead.barcode}`;
+  const messageText = lead.barcode
+    ? `Vero: Ola ${lead.name}, segue a Linha Digitavel para pagamento da sua fatura em atraso no valor de ${valorFormatado}: ${lead.barcode}`
+    : `Vero: Ola ${lead.name}, obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
   const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(messageText)}`;
 
   try {
