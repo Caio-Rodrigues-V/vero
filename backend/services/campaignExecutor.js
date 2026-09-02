@@ -18,7 +18,7 @@ async function processCampaign(campaignId, force = false) {
   const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '1500', 10);
   const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 500 ? 1500 : paceDelayMs;
 
-  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência: até 20 simultâneas | Pace Delay SIP: ${safePaceDelay}ms)`);
+  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência: até 40 simultâneas | Pace Delay SIP: ${safePaceDelay}ms)`);
 
   try {
     while (activeJobs.has(campaignId)) {
@@ -41,8 +41,8 @@ async function processCampaign(campaignId, force = false) {
       );
 
       // 2. Verificar limite de chamadas ativas simultâneas
-      const campaignLimit = campaign.concurrency_limit ? parseInt(campaign.concurrency_limit, 10) : 20;
-      const concurrencyLimit = Math.min(isNaN(campaignLimit) || campaignLimit <= 0 ? 20 : campaignLimit, 20);
+      const campaignLimit = campaign.concurrency_limit ? parseInt(campaign.concurrency_limit, 10) : 40;
+      const concurrencyLimit = Math.min(isNaN(campaignLimit) || campaignLimit <= 0 ? 40 : campaignLimit, 40);
 
       const activeCallsObj = get(
         `SELECT COUNT(*) as count FROM leads WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress')`,

@@ -65,7 +65,7 @@ function initDb() {
       dialer_provider TEXT DEFAULT 'vapi',
       vapi_assistant_id TEXT,
       vapi_phone_number_id TEXT,
-      concurrency_limit INTEGER DEFAULT 20,
+      concurrency_limit INTEGER DEFAULT 40,
       total_leads INTEGER DEFAULT 0,
       processed_leads INTEGER DEFAULT 0,
       successful_calls INTEGER DEFAULT 0,
@@ -81,7 +81,7 @@ function initDb() {
   safeAddColumn('campaigns', 'vapi_assistant_id TEXT');
   safeAddColumn('campaigns', 'vapi_phone_number_id TEXT');
   safeAddColumn('campaigns', 'dialer_provider TEXT DEFAULT "vapi"');
-  safeAddColumn('campaigns', 'concurrency_limit INTEGER DEFAULT 20');
+  safeAddColumn('campaigns', 'concurrency_limit INTEGER DEFAULT 40');
   safeAddColumn('campaigns', 'updated_at DATETIME');
 
   // 2. Tabela leads
@@ -136,7 +136,7 @@ function initDb() {
     db.exec('UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
     db.exec("UPDATE leads SET occurrence = 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE' WHERE (occurrence = 'PROMESSA BOLETO' OR occurrence = 'PROMESSA PIX') AND (transcript IS NULL OR transcript = '');");
     db.exec("UPDATE leads SET call_status = 'failed' WHERE (call_log LIKE '%customer-did-not-answer%' OR call_log LIKE '%customer-busy%' OR call_log LIKE '%no-answer%' OR call_log LIKE '%busy%' OR call_log LIKE '%failed-to-connect%') AND (transcript IS NULL OR transcript = '');");
-    db.exec("UPDATE campaigns SET concurrency_limit = 20 WHERE status IN ('processing', 'paused') AND (concurrency_limit IS NULL OR concurrency_limit < 20);");
+    db.exec("UPDATE campaigns SET concurrency_limit = 40 WHERE status IN ('processing', 'paused') AND (concurrency_limit IS NULL OR concurrency_limit < 40);");
   } catch (e) {}
 }
 
