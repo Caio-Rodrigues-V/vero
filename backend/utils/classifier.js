@@ -83,8 +83,7 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
 
   // Extrair apenas falas do cliente e normalizar sem acentos para comparações 100% precisas
   const customerSpeech = normalizeText(extractCustomerSpeech(transcript));
-  const summaryNormalized = normalizeText(summary);
-  const combinedText = `${summaryNormalized} ${customerSpeech}`;
+  const combinedText = customerSpeech;
 
   // 3. Classificações com base na fala do cliente (CPC)
   if (combinedText.includes('faleceu') || combinedText.includes('falecimento') || combinedText.includes('morreu') || combinedText.includes('obito')) {
