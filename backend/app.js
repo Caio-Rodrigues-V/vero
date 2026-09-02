@@ -882,6 +882,7 @@ app.get('/api/vapi/phone-numbers', async (req, res) => {
 
   if (!apiKey) {
     return res.json([
+      { id: '3fd74b77-c837-4c33-a6b2-20fd915c5a81', name: 'OKTOR SIP (+5521983137367)' },
       { id: '992eb80b-c46a-4d61-9087-37ec21c22333', name: 'New Voice NV (+5521989510033)' }
     ]);
   }
@@ -908,6 +909,7 @@ app.get('/api/vapi/phone-numbers', async (req, res) => {
   } catch (error) {
     console.error('Erro ao buscar phone numbers VAPI:', error);
     res.json([
+      { id: '3fd74b77-c837-4c33-a6b2-20fd915c5a81', name: 'OKTOR SIP (+5521983137367)' },
       { id: '992eb80b-c46a-4d61-9087-37ec21c22333', name: 'New Voice NV (+5521989510033)' },
       { id: '8a2d13db-2d28-4cd6-a745-031af5fd5305', name: 'NV BINA LOC (+5521987710179)' },
       { id: '7150a15e-7ada-4441-b10e-9dc475398405', name: 'OKTOR VERO (+5521984354821)' }
