@@ -1026,7 +1026,7 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     // 2. Inserir campanha no banco (status inicial como 'processing' para iniciar disparos imediatamente)
     const campaignResult = run(
       'INSERT INTO campaigns (name, status, dialer_provider, vapi_assistant_id, vapi_phone_number_id, concurrency_limit, total_leads) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [campaignName.trim(), 'processing', provider, vapiAssistantId || null, vapiPhoneNumberId || null, 40, leads.length]
+      [campaignName.trim(), 'processing', provider, vapiAssistantId || null, vapiPhoneNumberId || null, 20, leads.length]
     );
     const campaignId = campaignResult.lastInsertRowid;
 
