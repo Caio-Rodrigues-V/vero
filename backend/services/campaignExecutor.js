@@ -17,8 +17,8 @@ async function processCampaign(campaignId, force = false) {
 
   const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '1500', 10);
   const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 500 ? 1500 : paceDelayMs;
-  const batchSizeValue = parseInt(process.env.WORKER_CALL_BATCH_SIZE || process.env.CALL_DISPATCH_BATCH_SIZE || '20', 10);
-  const safeBatchSize = Math.min(isNaN(batchSizeValue) || batchSizeValue <= 0 ? 20 : batchSizeValue, 20);
+  const batchSizeValue = parseInt(process.env.WORKER_CALL_BATCH_SIZE || process.env.CALL_DISPATCH_BATCH_SIZE || '14', 10);
+  const safeBatchSize = Math.min(isNaN(batchSizeValue) || batchSizeValue <= 0 ? 14 : batchSizeValue, 14);
 
   console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência: até 20 simultâneas | Lote: até ${safeBatchSize} chamadas | Pace Delay SIP: ${safePaceDelay}ms)`);
 
