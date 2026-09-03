@@ -1580,16 +1580,63 @@ app.get('*', (req, res, next) => {
   }
 });
 
+/**
+ * Rota para reclassificar todas as ocorrências legadas no banco
+ */
+app.post('/api/leads/reclassify-occurrences', (req, res) => {
+  try {
+    const updated = run(`
+      UPDATE leads 
+      SET occurrence = 'CONFIRMOU CONTATO - ENVIO SMS' 
+      WHERE (call_status = 'completed' OR sms_status = 'completed') 
+        AND (occurrence IS NULL 
+             OR occurrence LIKE '%DESLIGOU%' 
+             OR occurrence LIKE '%MUDA%' 
+             OR occurrence LIKE '%PROMESSA BOLETO%' 
+             OR occurrence LIKE '%ABANDONO%'
+             OR occurrence LIKE '%TENTATIVA%')
+        AND occurrence NOT IN ('FALECIDO', 'CLIENTE DESCONHECIDO', 'ALEGA PAGAMENTO - SEM COMPROVANTE', 'NAO PAGARA - DESEMPREGADO', 'NÃO PAGARÁ - SOLICITOU O CANCELAMENTO', 'ROBO SOLICITA ATENDIMENTO HUMANO', 'NÃO PAGARÁ - PROBLEMA FINANCEIRO', 'RETORNO AGENDADO COM CLIENTE', 'PROMESSA PIX', 'PROMESSA CARTÃO')
+    `);
+
+    // Recalcular métricas de todas as campanhas
+    const campaigns = all('SELECT id FROM campaigns');
+    campaigns.forEach(c => updateCampaignStats(c.id));
+
+    res.json({
+      success: true,
+      message: `Todas as ligações e SMS atendidos antigos foram reclassificados com sucesso como 'CONFIRMOU CONTATO - ENVIO SMS'.`,
+      changes: updated.changes
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
   
   // Atualizar ocorrências legadas de chamadas atendidas para a tabulação oficial
   try {
-    run(`UPDATE leads 
-         SET occurrence = 'CONFIRMOU CONTATO - ENVIO SMS' 
-         WHERE call_status = 'completed' 
-           AND (occurrence IS NULL OR occurrence LIKE '%DESLIGOU%' OR occurrence LIKE '%MUDA%' OR occurrence LIKE '%PROMESSA BOLETO%' OR occurrence LIKE '%ABANDONO%')`);
-  } catch (e) {}
+    const res = run(`
+      UPDATE leads 
+      SET occurrence = 'CONFIRMOU CONTATO - ENVIO SMS' 
+      WHERE (call_status = 'completed' OR sms_status = 'completed') 
+        AND (occurrence IS NULL 
+             OR occurrence LIKE '%DESLIGOU%' 
+             OR occurrence LIKE '%MUDA%' 
+             OR occurrence LIKE '%PROMESSA BOLETO%' 
+             OR occurrence LIKE '%ABANDONO%'
+             OR occurrence LIKE '%TENTATIVA%')
+        AND occurrence NOT IN ('FALECIDO', 'CLIENTE DESCONHECIDO', 'ALEGA PAGAMENTO - SEM COMPROVANTE', 'NAO PAGARA - DESEMPREGADO', 'NÃO PAGARÁ - SOLICITOU O CANCELAMENTO', 'ROBO SOLICITA ATENDIMENTO HUMANO', 'NÃO PAGARÁ - PROBLEMA FINANCEIRO', 'RETORNO AGENDADO COM CLIENTE', 'PROMESSA PIX', 'PROMESSA CARTÃO')
+    `);
+    if (res && res.changes > 0) {
+      console.log(`[RECLASSIFY] ${res.changes} leads antigos foram atualizados para 'CONFIRMOU CONTATO - ENVIO SMS'.`);
+      const allCamps = all('SELECT id FROM campaigns');
+      allCamps.forEach(c => updateCampaignStats(c.id));
+    }
+  } catch (e) {
+    console.error('[RECLASSIFY ERROR]', e.message);
+  }
 
   // Auto-retomar somente campanhas que já estavam em processamento quando o servidor reiniciou.
   try {
