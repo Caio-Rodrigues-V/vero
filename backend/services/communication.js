@@ -337,7 +337,54 @@ async function triggerSmartRcs(lead) {
  * @param {object} lead - O objeto do lead
  * @returns {Promise<{success: boolean, log: string}>}
  */
-async function triggerDdmShortSms(lead) {
+// ==========================================
+// FILA SEQUENCIAL DE DISPARO DE SMS (400ms)
+// ==========================================
+const smsQueue = [];
+let isProcessingQueue = false;
+
+async function processSmsQueue() {
+  if (isProcessingQueue) return;
+  isProcessingQueue = true;
+
+  while (smsQueue.length > 0) {
+    const item = smsQueue.shift();
+    const { lead, resolve } = item;
+
+    try {
+      console.log(`[SMS QUEUE] Processando Lead #${lead.id} (${lead.name || lead.phone}). Restantes na fila: ${smsQueue.length}`);
+      const result = await executeDdmShortSmsWithRetry(lead);
+      resolve(result);
+    } catch (err) {
+      resolve({ success: false, log: `[DDM SMS] Erro na fila: ${err.message}` });
+    }
+
+    // Intervalo de proteção de 400ms entre cada envio para não sobrecarregar a API DDM
+    if (smsQueue.length > 0) {
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+
+  isProcessingQueue = false;
+}
+
+/**
+ * Enfileira um disparo de SMS para processamento sequencial controlado
+ */
+function enqueueDdmSms(lead) {
+  return new Promise((resolve) => {
+    smsQueue.push({ lead, resolve });
+    console.log(`[SMS QUEUE] Lead #${lead.id} adicionado à fila. Tamanho da fila: ${smsQueue.length}`);
+    processSmsQueue().catch(err => {
+      console.error('[SMS QUEUE ERROR]', err);
+    });
+  });
+}
+
+/**
+ * Disparo real de SMS com até 3 retentativas automáticas e backoff
+ */
+async function executeDdmShortSmsWithRetry(lead) {
   const apiUrl = process.env.DDM_SHORT_SMS_URL || 'https://ddmacordos.com/ddm_api/Envia_SMS/enviaShort.php';
 
   const targetPhone = process.env.TEST_PHONE || lead.phone;
@@ -361,34 +408,50 @@ async function triggerDdmShortSms(lead) {
   const messageText = buildDdmShortMessage(lead, valorFormatado);
   const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(messageText)}`;
 
-  try {
-    console.log(`[DDM SMS] Enviando SMS curto para ${cleanedPhone}...`);
-    const response = await fetch(url, { method: 'GET' });
-    const responseText = await response.text();
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`[DDM SMS] Enviando SMS para ${cleanedPhone} (Tentativa ${attempt}/3)...`);
+      const response = await fetch(url, { method: 'GET' });
+      const responseText = await response.text();
 
-    if (!response.ok) {
-      throw new Error(`Erro API DDM SMS: ${response.status} - ${responseText}`);
+      if (!response.ok) {
+        throw new Error(`Erro API DDM SMS: ${response.status} - ${responseText}`);
+      }
+
+      console.log(`[DDM SMS] Resposta para Lead #${lead.id}: ${responseText}`);
+      return {
+        success: true,
+        log: `[DDM SMS] Enviado com sucesso. Resposta: ${responseText || 'OK'}`
+      };
+    } catch (error) {
+      lastError = error;
+      console.warn(`[DDM SMS WARN] Tentativa ${attempt}/3 falhou para Lead #${lead.id}: ${error.message}`);
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
-
-    console.log(`[DDM SMS] Resposta para Lead #${lead.id}: ${responseText}`);
-    return {
-      success: true,
-      log: `[DDM SMS] Enviado com sucesso. Resposta: ${responseText || 'OK'}`
-    };
-  } catch (error) {
-    console.error(`[DDM SMS ERROR] Falha ao enviar para lead #${lead.id}:`, error.message);
-    return {
-      success: false,
-      log: `[DDM SMS] Falha no envio: ${error.message}`
-    };
   }
+
+  console.error(`[DDM SMS ERROR] Falha definitiva após 3 tentativas para lead #${lead.id}:`, lastError?.message);
+  return {
+    success: false,
+    log: `[DDM SMS] Falha no envio: ${lastError?.message || 'Erro desconhecido'}`
+  };
 }
 
 /**
- * Roteador de mensagens SMS: usa a API curta da DDM como canal principal.
+ * Dispara SMS curto pela API DDM via fila com controle de concorrência.
+ */
+async function triggerDdmShortSms(lead) {
+  return await enqueueDdmSms(lead);
+}
+
+/**
+ * Roteador de mensagens SMS: usa a fila da API curta da DDM como canal principal.
  */
 async function dispatchSmsOrRcs(lead) {
-  return await triggerDdmShortSms(lead);
+  return await enqueueDdmSms(lead);
 }
 
 module.exports = { 
