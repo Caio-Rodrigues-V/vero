@@ -1246,7 +1246,7 @@ app.post('/api/vapi-webhook', async (req, res) => {
 
     if (!transcriptText && Array.isArray(message?.artifact?.messages)) {
       transcriptText = message.artifact.messages
-        .filter(m => m.role && (m.message || m.content))
+        .filter(m => m.role && m.role !== 'system' && (m.message || m.content))
         .map(m => `${m.role === 'assistant' || m.role === 'bot' ? 'Vero' : 'Cliente'}: ${m.message || m.content}`)
         .join('\n');
     }
@@ -1636,6 +1636,17 @@ app.listen(PORT, () => {
       SET occurrence = 'IGNORADO - CONTATADO RECENTEMENTE (QUARENTENA 3D)' 
       WHERE (call_log LIKE '%Quarentena%' OR call_log LIKE '%Ignorado%')
         AND (occurrence IS NULL OR occurrence = '' OR occurrence LIKE '%TENTATIVA%')
+    `);
+    run(`
+      UPDATE leads 
+      SET transcript = NULL,
+          occurrence = 'CONFIRMOU CONTATO - ENVIO SMS'
+      WHERE transcript LIKE '%# PERSONA%' AND occurrence = 'FALECIDO'
+    `);
+    run(`
+      UPDATE leads 
+      SET transcript = NULL
+      WHERE transcript LIKE '%# PERSONA%'
     `);
     if (res && res.changes > 0) {
       console.log(`[RECLASSIFY] ${res.changes} leads antigos foram atualizados para 'CONFIRMOU CONTATO - ENVIO SMS'.`);

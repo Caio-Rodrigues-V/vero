@@ -31,6 +31,10 @@ function normalizeText(text) {
  */
 function extractCustomerSpeech(transcript) {
   if (!transcript) return '';
+  // Se a transcrição contiver o prompt de persona, descartar o bloco de prompt
+  if (transcript.includes('# PERSONA') || transcript.includes('# REGRAS')) {
+    transcript = transcript.replace(/# PERSONA[\s\S]*?(?=(Vero:|Cliente:|$))/i, '');
+  }
   const lines = transcript.split('\n');
   const customerLines = [];
 
@@ -38,6 +42,9 @@ function extractCustomerSpeech(transcript) {
     const lower = line.toLowerCase().trim();
     if (lower.startsWith('vero:') || lower.startsWith('vêro:') || lower.startsWith('assistant:') || lower.startsWith('bot:') || lower.startsWith('ai:')) {
       continue;
+    }
+    if (lower.startsWith('#') || lower.startsWith('**') || lower.includes('end_call') || lower.includes('voicemail_tool')) {
+      continue; // Descartar instruções de prompt
     }
     if (lower.startsWith('user:') || lower.startsWith('customer:') || lower.startsWith('cliente:')) {
       customerLines.push(line.replace(/^(user|customer|cliente):/i, '').trim());
