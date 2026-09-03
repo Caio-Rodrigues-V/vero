@@ -151,43 +151,13 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     return 'RETORNO AGENDADO COM CLIENTE';
   }
 
-  // 4. Confirmação de CPC e Envio de SMS / Lembrete transmitido
-  const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|eu mesma|eu mesmo|isso|confirmo|exato|esta|é ela|e ela|é ele|e ele|palestine|posso ajudar|fale|ok|ta bom|tá bom|entendido|certo|pode enviar|manda|bom dia|boa tarde|boa noite|alo|alô|ola|olá|fala|opa)\b/i.test(combinedText);
+  // 4. Se a pessoa solicitou PIX ou Cartão
+  if (combinedText.includes('pix')) return 'PROMESSA PIX';
+  if (combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
 
-  const hasPromiseKeywords = 
-    combinedText.includes('promessa') || 
-    combinedText.includes('vou pagar') || 
-    combinedText.includes('pago amanha') || 
-    combinedText.includes('aceitou boleto') || 
-    combinedText.includes('envia o boleto') || 
-    combinedText.includes('envia o sms') || 
-    combinedText.includes('mandar o sms') || 
-    combinedText.includes('enviar o boleto') ||
-    combinedText.includes('pode mandar') ||
-    combinedText.includes('manda o boleto') ||
-    combinedText.includes('manda por sms') ||
-    combinedText.includes('vou quitar');
-
-  const robotDeliveredMessage = 
-    fullTranscriptNorm.includes('sms') || 
-    fullTranscriptNorm.includes('fatura') || 
-    fullTranscriptNorm.includes('codigo de barras') || 
-    fullTranscriptNorm.includes('linha digitavel') ||
-    fullTranscriptNorm.includes('valor de');
-
-  if (isAffirmativeCpc || hasPromiseKeywords || (customerSpeech.length > 0 && robotDeliveredMessage)) {
-    if (combinedText.includes('pix')) return 'PROMESSA PIX';
-    if (combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
-    return 'CONFIRMOU CONTATO - ENVIO SMS';
-  }
-
-  // 5. Quedas durante a chamada atendida sem confirmação
-  if (dur >= 8 && (reason === 'customer-hung-up' || reason === 'assistant-hung-up')) {
-    return 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE';
-  }
-
-  // Fallback geral se a ligação ficou muda ou desligou sem falar
-  return 'TENTATIVA - LIGAÇÃO MUDA / DESLIGOU';
+  // 5. REGRA OFICIAL DE PRODUÇÃO: Atendeu a ligação = Envio de SMS
+  // (Qualquer chamada conectada/atendida, incluindo silêncio da Vapi ou desligamento do cliente)
+  return 'CONFIRMOU CONTATO - ENVIO SMS';
 }
 
 module.exports = {
