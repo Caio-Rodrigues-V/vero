@@ -204,8 +204,8 @@ export default function App() {
   const [selectedVapiAssistantId, setSelectedVapiAssistantId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Selected Campaign for Leads view
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | 'all' | null>(null);
+  // Selected Campaign for Leads view (default: 'all')
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | 'all'>('all');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsPage, setLeadsPage] = useState(1);
   const [leadsTotalPages, setLeadsTotalPages] = useState(1);
@@ -243,7 +243,8 @@ export default function App() {
     fetchRetellAgents();
     fetchRetellPhoneNumbers();
     fetchOccurrences('all');
-    fetchHourlyStats('all', 8, 21);
+    fetchHourlyStats('all', 8, 21, selectedDate);
+    fetchLeads('all', 1);
     fetchSystemInfo();
   }, []);
 
@@ -329,12 +330,11 @@ export default function App() {
 
   const handleOpenTranscriptModal = (lead: Lead) => {
     setSelectedTranscriptLead(lead);
-    fetch(`${BACKEND_URL}/api/leads/${lead.id}/details`)
+    fetch(`${BACKEND_URL}/api/campaigns/lead/${lead.id}`)
       .then(res => res.json())
-      .then(data => {
-        if (data && data.lead) {
-          setSelectedTranscriptLead(data.lead);
-          setLeads(prev => prev.map(item => item.id === data.lead.id ? data.lead : item));
+      .then(fullLead => {
+        if (fullLead && !fullLead.error) {
+          setSelectedTranscriptLead(fullLead);
         }
       })
       .catch(err => console.error('Error fetching live lead details:', err));
@@ -347,7 +347,7 @@ export default function App() {
   const leadsPageRef = useRef(leadsPage);
   leadsPageRef.current = leadsPage;
 
-  const fetchHourlyStats = async (campaignId: number | 'all' = selectedCampaignId || 'all', sH: number = startHour, eH: number = endHour, dt: string = selectedDate) => {
+  const fetchHourlyStats = async (campaignId: number | 'all' = selectedCampaignId, sH: number = startHour, eH: number = endHour, dt: string = selectedDate) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard/hourly-stats?campaignId=${campaignId}&startHour=${sH}&endHour=${eH}&date=${dt}`);
       if (res.ok) {
@@ -363,16 +363,16 @@ export default function App() {
   useEffect(() => {
     fetchStats();
     fetchCampaigns();
-    fetchOccurrences(selectedCampaignId || 'all');
-    fetchHourlyStats(selectedCampaignId || 'all', startHour, endHour, selectedDate);
-    fetchLeads(selectedCampaignId || 'all', leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
+    fetchOccurrences(selectedCampaignId);
+    fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
+    fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
 
     const interval = setInterval(() => {
       fetchStats();
       fetchCampaigns();
-      fetchOccurrences(selectedCampaignId || 'all');
-      fetchHourlyStats(selectedCampaignId || 'all', startHour, endHour, selectedDate);
-      fetchLeads(selectedCampaignId || 'all', leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
+      fetchOccurrences(selectedCampaignId);
+      fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
+      fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
     }, 3000);
 
     return () => clearInterval(interval);
@@ -396,10 +396,6 @@ export default function App() {
       if (res.ok) {
         const data: Campaign[] = await res.json();
         setCampaigns(data);
-        if (data.length > 0 && selectedCampaignId === null) {
-          setSelectedCampaignId(data[0].id);
-          fetchLeads(data[0].id, 1, statusFilterRef.current, searchTermRef.current);
-        }
       }
     } catch (err) {
       console.error('Error fetching campaigns:', err);
@@ -415,9 +411,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignId: selectedCampaignId })
       });
-      if (selectedCampaignId) {
-        fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
-      }
+      fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
     } catch (e) {
       console.error('Error syncing recordings:', e);
     }
@@ -442,6 +436,7 @@ export default function App() {
     setLeadsPage(1);
     fetchLeads(id, 1, statusFilterRef.current, searchTermRef.current);
     fetchOccurrences(id);
+    fetchHourlyStats(id, startHour, endHour, selectedDate);
   };
 
   const handleFileUpload = async (e: React.FormEvent) => {
@@ -533,7 +528,7 @@ export default function App() {
         method: 'DELETE'
       });
       if (res.ok) {
-        setSelectedCampaignId(null);
+        setSelectedCampaignId('all');
         setLeads([]);
         fetchCampaigns();
         fetchStats();
@@ -642,29 +637,28 @@ export default function App() {
           
           {/* TAB 1: DASHBOARD OPERACIONAL EXECUTIVO */}
           {activeTab === 'dashboard' && (() => {
-            const activeCampaign = (selectedCampaignId && selectedCampaignId !== 'all')
-              ? campaigns.find(c => c.id === selectedCampaignId)
-              : (campaigns.find(c => c.status === 'processing') || campaigns[0]);
+            const isSpecificCampaign = selectedCampaignId !== 'all';
+            const activeCampaign = isSpecificCampaign ? campaigns.find(c => c.id === selectedCampaignId) : null;
 
-            const totalLeadsBase = (selectedCampaignId && selectedCampaignId !== 'all')
+            const totalLeadsBase = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.total_leads : 0)
-              : (stats.total_leads || 0);
+              : (stats.total_leads || campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0));
 
-            const totalDiscados = (selectedCampaignId && selectedCampaignId !== 'all')
+            const totalDiscados = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.processed_leads : 0)
-              : (stats.total_processed || 0);
+              : (stats.total_processed || campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0));
 
-            const totalAtendidas = (selectedCampaignId && selectedCampaignId !== 'all')
+            const totalAtendidas = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.successful_calls : 0)
-              : (stats.total_successful_calls || 0);
+              : (stats.total_successful_calls || campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0));
 
-            const totalNaoAtendidas = (selectedCampaignId && selectedCampaignId !== 'all')
+            const totalNaoAtendidas = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.failed_calls : 0)
-              : (stats.total_failed_calls || 0);
+              : (stats.total_failed_calls || campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0));
 
-            const totalSms = (selectedCampaignId && selectedCampaignId !== 'all')
+            const totalSms = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.successful_sms : 0)
-              : (stats.total_successful_sms || 0);
+              : (stats.total_successful_sms || campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0));
 
             // Cálculo dos Spins (Giros da Base): Soma do progresso proporcional das campanhas
             const totalSpins = campaigns.reduce((acc, c) => {
@@ -672,7 +666,7 @@ export default function App() {
               return acc + (c.processed_leads / c.total_leads);
             }, 0);
 
-            const activeSpins = (selectedCampaignId && selectedCampaignId !== 'all')
+            const activeSpins = isSpecificCampaign
               ? (activeCampaign && activeCampaign.total_leads > 0 ? (activeCampaign.processed_leads / activeCampaign.total_leads) : 0)
               : totalSpins;
 
@@ -733,19 +727,10 @@ export default function App() {
                     <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
                       <span className="text-xs font-medium text-slate-500">Campanha:</span>
                       <select 
-                        value={selectedCampaignId || 'all'}
+                        value={selectedCampaignId}
                         onChange={(e) => {
                           const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
-                          if (val === 'all') {
-                            setSelectedCampaignId(null);
-                            fetchOccurrences('all');
-                            fetchHourlyStats('all', startHour, endHour);
-                          } else {
-                            setSelectedCampaignId(val);
-                            fetchOccurrences(val);
-                            fetchHourlyStats(val, startHour, endHour);
-                            fetchLeads(val, 1);
-                          }
+                          handleCampaignSelect(val);
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer max-w-[220px]"
                       >
@@ -1030,11 +1015,10 @@ export default function App() {
                             placeholder="Buscar por nome, telefone ou CPF..."
                             value={searchTerm}
                             onChange={(e) => {
-                              setSearchTerm(e.target.value);
+                              const val = e.target.value;
+                              setSearchTerm(val);
                               setLeadsPage(1);
-                              if (selectedCampaignId) {
-                                fetchLeads(selectedCampaignId, 1, statusFilter, e.target.value);
-                              }
+                              fetchLeads(selectedCampaignId, 1, statusFilter, val);
                             }}
                             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:border-slate-400"
                           />
@@ -1045,18 +1029,17 @@ export default function App() {
                           <select 
                             value={statusFilter}
                             onChange={(e) => {
-                              setStatusFilter(e.target.value);
+                              const val = e.target.value;
+                              setStatusFilter(val);
                               setLeadsPage(1);
-                              if (selectedCampaignId) {
-                                fetchLeads(selectedCampaignId, 1, e.target.value, searchTerm);
-                              }
+                              fetchLeads(selectedCampaignId, 1, val, searchTerm);
                             }}
                             className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none focus:border-slate-400"
                           >
                             <option value="all">Todas as Ligações</option>
                             <option value="answered">🟢 Somente Ligações Atendidas</option>
                             <option value="failed">🔴 Somente Não Atendidas</option>
-                            <option value="quarantine">🟡 Somente Quarentena (3 Dias)</option>
+                            <option value="quarantine">🟡 Somente SMS ENVIADO 3 DIAS</option>
                           </select>
                         </div>
                       </div>
@@ -1140,7 +1123,7 @@ export default function App() {
                             onClick={() => {
                               const p = Math.max(1, leadsPage - 1);
                               setLeadsPage(p);
-                              if (selectedCampaignId) fetchLeads(selectedCampaignId, p, statusFilter, searchTerm);
+                              fetchLeads(selectedCampaignId, p, statusFilter, searchTerm);
                             }}
                             disabled={leadsPage <= 1}
                             className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs disabled:opacity-40 hover:bg-slate-50"
@@ -1151,7 +1134,7 @@ export default function App() {
                             onClick={() => {
                               const p = Math.min(leadsTotalPages, leadsPage + 1);
                               setLeadsPage(p);
-                              if (selectedCampaignId) fetchLeads(selectedCampaignId, p, statusFilter, searchTerm);
+                              fetchLeads(selectedCampaignId, p, statusFilter, searchTerm);
                             }}
                             disabled={leadsPage >= leadsTotalPages}
                             className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs disabled:opacity-40 hover:bg-slate-50"
