@@ -82,7 +82,8 @@ app.get('/api/dashboard/stats', (req, res) => {
           SUM(CASE WHEN call_status = 'completed' OR (occurrence LIKE 'ATENDEU%' AND occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
           SUM(CASE WHEN call_status = 'failed' OR occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
           SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
-          SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms
+          SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
+          SUM(CASE WHEN occurrence LIKE '%3 DIAS%' OR occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
         FROM leads
         WHERE date(datetime(updated_at, '-3 hours')) = date(?)
       `;
@@ -105,6 +106,7 @@ app.get('/api/dashboard/stats', (req, res) => {
         total_failed_calls: dayStats.total_failed_calls || 0,
         total_successful_sms: dayStats.total_successful_sms || 0,
         total_failed_sms: dayStats.total_failed_sms || 0,
+        total_quarantine_sms: dayStats.total_quarantine_sms || 0,
       });
     }
 
@@ -139,6 +141,13 @@ app.get('/api/dashboard/stats', (req, res) => {
 
     const stats = get(query, params) || {};
 
+    const quarantineQuery = `
+      SELECT SUM(CASE WHEN occurrence LIKE '%3 DIAS%' OR occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+      FROM leads
+      ${campaignId && campaignId !== 'all' ? 'WHERE campaign_id = ?' : ''}
+    `;
+    const quarantineRow = get(quarantineQuery, campaignId && campaignId !== 'all' ? [campaignId] : []);
+
     const response = {
       total_campaigns: stats.total_campaigns || 0,
       total_leads: stats.total_leads || 0,
@@ -147,6 +156,7 @@ app.get('/api/dashboard/stats', (req, res) => {
       total_failed_calls: stats.total_failed_calls || 0,
       total_successful_sms: stats.total_successful_sms || 0,
       total_failed_sms: stats.total_failed_sms || 0,
+      total_quarantine_sms: quarantineRow ? (quarantineRow.total_quarantine_sms || 0) : 0,
     };
 
     res.json(response);

@@ -76,6 +76,7 @@ interface DashboardStats {
   total_failed_calls: number;
   total_successful_sms: number;
   total_failed_sms: number;
+  total_quarantine_sms?: number;
 }
 
 const BACKEND_URL = window.location.origin.includes('localhost:5173') ? 'http://localhost:3001' : window.location.origin;
@@ -672,6 +673,8 @@ export default function App() {
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
+            const totalQuarentena3Dias = (occurrences.find(o => o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA'))?.count) || (stats.total_quarantine_sms || 0);
+
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const conversaoRate = totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0;
             const conversaoAloRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
@@ -946,8 +949,13 @@ export default function App() {
                         pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} 
                         status="success" 
                       />
-                      {totalAtendidas > totalSms && (
-                        <FlowNode title="🟡 SMS ENVIADO 3 DIAS" count={totalAtendidas - totalSms} pct={`${(100 - (totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0)).toFixed(2).replace('.', ',')}%`} status="warning" />
+                      {totalQuarentena3Dias > 0 && (
+                        <FlowNode 
+                          title="🟡 SMS ENVIADO 3 DIAS" 
+                          count={totalQuarentena3Dias} 
+                          pct={`${(totalDiscados > 0 ? (totalQuarentena3Dias / totalDiscados) * 100 : 0).toFixed(2).replace('.', ',')}%`} 
+                          status="warning" 
+                        />
                       )}
                     </div>
                   </div>
