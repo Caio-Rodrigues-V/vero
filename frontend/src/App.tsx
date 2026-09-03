@@ -977,25 +977,44 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 tabular-nums">
-                          {occurrences.map(o => {
-                            const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
-                            const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
-                            const colorClass = isAnswered ? 'text-emerald-700 font-semibold' : is3Days ? 'text-amber-700' : 'text-rose-700';
+                          {/* 1. ATENDEU - SMS ENVIADO */}
+                          <tr className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-2.5 px-4 font-semibold text-emerald-700">🟢 ATENDEU - SMS ENVIADO</td>
+                            {hourlyData.map(h => (
+                              <td key={h.hour} className="py-2.5 px-2.5 text-center text-slate-700 font-medium">{h.atendeu.toLocaleString('pt-BR')}</td>
+                            ))}
+                            <td className="py-2.5 px-4 text-right font-bold text-emerald-700">{totalAtendidas.toLocaleString('pt-BR')}</td>
+                          </tr>
 
-                            return (
-                              <tr key={o.occurrence} className="hover:bg-slate-50/70 transition-colors">
-                                <td className={`py-2.5 px-4 font-medium ${colorClass}`}>{o.occurrence}</td>
-                                {hourlyData.map(h => {
-                                  const val = isAnswered ? h.atendeu : is3Days ? h.quarentena3Dias : h.naoAtendeu;
-                                  return (
-                                    <td key={h.hour} className="py-2.5 px-2.5 text-center text-slate-600">{val || 0}</td>
-                                  );
-                                })}
-                                <td className="py-2.5 px-4 text-right font-bold text-slate-900">{o.count.toLocaleString('pt-BR')}</td>
-                              </tr>
-                            );
-                          })}
+                          {/* 2. NÃO ATENDEU */}
+                          <tr className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-2.5 px-4 font-medium text-rose-700">🔴 NÃO ATENDEU</td>
+                            {hourlyData.map(h => (
+                              <td key={h.hour} className="py-2.5 px-2.5 text-center text-slate-600">{h.naoAtendeu.toLocaleString('pt-BR')}</td>
+                            ))}
+                            <td className="py-2.5 px-4 text-right font-bold text-rose-700">{totalNaoAtendidas.toLocaleString('pt-BR')}</td>
+                          </tr>
+
+                          {/* 3. SMS ENVIADO 3 DIAS */}
+                          {totalQuarentena3Dias > 0 && (
+                            <tr className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-2.5 px-4 font-medium text-amber-700">🟡 SMS ENVIADO 3 DIAS</td>
+                              {hourlyData.map(h => (
+                                <td key={h.hour} className="py-2.5 px-2.5 text-center text-slate-600">{h.quarentena3Dias.toLocaleString('pt-BR')}</td>
+                              ))}
+                              <td className="py-2.5 px-4 text-right font-bold text-amber-700">{totalQuarentena3Dias.toLocaleString('pt-BR')}</td>
+                            </tr>
+                          )}
                         </tbody>
+                        <tfoot className="bg-slate-50/90 font-semibold border-t-2 border-slate-200 text-slate-900 text-[11px] tabular-nums">
+                          <tr>
+                            <td className="py-3 px-4 uppercase tracking-wider">Total Discado</td>
+                            {hourlyData.map(h => (
+                              <td key={h.hour} className="py-3 px-2.5 text-center font-bold">{(h.atendeu + h.naoAtendeu).toLocaleString('pt-BR')}</td>
+                            ))}
+                            <td className="py-3 px-4 text-right font-bold text-slate-900">{totalDiscados.toLocaleString('pt-BR')}</td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   </div>
