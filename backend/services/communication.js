@@ -11,12 +11,12 @@ function buildPaymentMessage(lead, valorFormatado) {
 }
 
 function limitSmsMessage(text) {
-  return String(text).replace(/\s+/g, ' ').trim().slice(0, 160);
+  return String(text).slice(0, 160);
 }
 
 function buildDdmShortMessage(lead, valorFormatado) {
   if (lead.barcode) {
-    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${lead.barcode}`);
+    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel:\n${lead.barcode}`);
   }
   return limitSmsMessage(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
 }

@@ -10,7 +10,7 @@ const DEFAULT_PLANILHA_DOWNLOADS = 'C:\\Users\\caio.vicente\\Downloads\\linha di
 const AUDIT_LEADS_FILE = path.join(__dirname, '../../outputs/relatorio_reenvio_sms_ddm_1788446202569.csv');
 
 function limitSmsMessage(text) {
-  return String(text).replace(/\s+/g, ' ').trim().slice(0, 160);
+  return String(text).slice(0, 160);
 }
 
 function buildDdmShortMessage(debtValue, barcode) {
@@ -18,7 +18,7 @@ function buildDdmShortMessage(debtValue, barcode) {
   const valorFormatado = isNaN(parsedValue) 
     ? 'R$ 0,00' 
     : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parsedValue);
-  return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${barcode}`);
+  return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel:\n${barcode}`);
 }
 
 async function sendSingleSms(phone, messageText) {

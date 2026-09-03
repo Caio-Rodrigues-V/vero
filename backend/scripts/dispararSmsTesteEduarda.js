@@ -9,7 +9,7 @@ const leadTeste = {
 
 function buildDdmShortMessage(debtValue, barcode) {
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(debtValue);
-  return `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${barcode}`;
+  return `Vero: fatura em aberto ${valorFormatado}. Linha digitavel:\n${barcode}`;
 }
 
 async function sendTestSms() {
