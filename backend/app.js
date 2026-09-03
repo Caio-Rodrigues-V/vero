@@ -1222,6 +1222,35 @@ app.all('/api/tools/clear-quarantine', (req, res) => {
 });
 
 /**
+ * Dispara um SMS de teste imediato pela API da Vero / DDM
+ */
+app.all('/api/tools/send-test-sms', async (req, res) => {
+  const phone = req.query.phone || req.body?.phone || '21981811077';
+  const name = req.query.name || req.body?.name || 'Caio Vicente';
+  const barcode = req.query.barcode || req.body?.barcode || '84670000001743590024020902405020130000000000';
+  const debt_value = parseFloat(req.query.valor || req.body?.valor || '189.90');
+
+  try {
+    const { triggerDdmShortSms } = require('./services/communication.js');
+    const result = await triggerDdmShortSms({
+      name,
+      phone,
+      debt_value,
+      barcode
+    });
+
+    res.json({
+      success: result.success,
+      targetPhone: phone,
+      log: result.log,
+      message: result.success ? `SMS disparado com sucesso para ${phone}!` : `Falha ao disparar SMS: ${result.log}`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * Endpoint de callback para o n8n atualizar o status do lead
  */
 app.post('/api/leads/update', (req, res) => {
