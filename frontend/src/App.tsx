@@ -14,11 +14,22 @@ import {
   Search, 
   ChevronLeft, 
   ChevronRight,
-  Sparkles,
   MessageSquare,
   X,
   Filter
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip as RechartsTooltip, 
+  Legend, 
+  PieChart, 
+  Pie, 
+  Cell 
+} from 'recharts';
 
 // Interfaces para os tipos de dados
 interface Campaign {
@@ -68,6 +79,76 @@ interface DashboardStats {
 
 const BACKEND_URL = window.location.origin.includes('localhost:5173') ? 'http://localhost:3001' : window.location.origin;
 
+interface GaugeProps {
+  value: number;
+  label: string;
+  color?: string;
+  tooltipInfo?: string;
+}
+
+const SemiCircleGauge: React.FC<GaugeProps> = ({ 
+  value, 
+  label, 
+  color = '#00a4b4',
+  tooltipInfo
+}) => {
+  const clamped = Math.min(100, Math.max(0, isNaN(value) ? 0 : value));
+  const radius = 64;
+  const strokeWidth = 14;
+  const circumference = Math.PI * radius;
+  const strokeDashoffset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col items-center justify-between min-h-[210px] relative">
+      <div className="flex items-center justify-between w-full">
+        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+          {label}
+          <span 
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-100 text-slate-400 text-[10px] font-bold cursor-help border border-slate-200" 
+            title={tooltipInfo || `Indicador de ${label}`}
+          >
+            i
+          </span>
+        </span>
+      </div>
+      
+      <div className="relative flex flex-col items-center justify-center my-auto">
+        <svg width="160" height="95" viewBox="0 0 160 95" className="overflow-visible">
+          {/* Fundo do Arco */}
+          <path
+            d="M 16 85 A 64 64 0 0 1 144 85"
+            fill="none"
+            stroke="#f1f5f9"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+          {/* Preenchimento Dinâmico */}
+          <path
+            d="M 16 85 A 64 64 0 0 1 144 85"
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            className="transition-all duration-1000 ease-out"
+          />
+        </svg>
+        <div className="absolute bottom-1 text-center">
+          <span className="text-2xl font-black text-slate-800 tracking-tight">
+            {clamped.toFixed(2).replace('.', ',')}%
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full flex justify-between text-[10px] font-bold text-slate-400 px-3">
+        <span className="bg-slate-100 px-1.5 py-0.5 rounded">0%</span>
+        <span className="bg-slate-100 px-1.5 py-0.5 rounded">100%</span>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'campaigns' | 'leads' | 'reports'>('dashboard');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -105,6 +186,12 @@ export default function App() {
   const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
   const [exportOccurrenceFilter, setExportOccurrenceFilter] = useState<string>('all');
   
+  // BI e Métricas por Horário
+  const [hourlyData, setHourlyData] = useState<{ hour: string; atendeu: number; naoAtendeu: number; quarentena3Dias: number; total: number }[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startHour, setStartHour] = useState<number>(8);
+  const [endHour, setEndHour] = useState<number>(21);
+
   // Dialer Provider (VAPI vs Retell AI)
   const [dialerProvider, setDialerProvider] = useState<'vapi' | 'retell'>('vapi');
   const [retellAgents, setRetellAgents] = useState<{ id: string; name: string }[]>([]);
@@ -113,11 +200,6 @@ export default function App() {
   // Phone Numbers / Troncos SIP VAPI
   const [vapiPhoneNumbers, setVapiPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
   const [selectedVapiPhoneNumberId, setSelectedVapiPhoneNumberId] = useState<string>('');
-
-  // Simulation state
-  const [simulating, setSimulating] = useState(false);
-
-  const [systemInfo, setSystemInfo] = useState<{ providerName?: string; dialerProvider?: string; defaultUploadDialerProvider?: 'vapi' | 'retell' } | null>(null);
 
   // Fetch initial data
   useEffect(() => {
@@ -128,6 +210,7 @@ export default function App() {
     fetchRetellAgents();
     fetchRetellPhoneNumbers();
     fetchOccurrences('all');
+    fetchHourlyStats('all', 8, 21);
     fetchSystemInfo();
   }, []);
 
@@ -136,7 +219,6 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/system-info`);
       if (res.ok) {
         const data = await res.json();
-        setSystemInfo(data);
         if (data.defaultUploadDialerProvider === 'vapi' || data.defaultUploadDialerProvider === 'retell') {
           setDialerProvider(data.defaultUploadDialerProvider);
         }
@@ -232,6 +314,18 @@ export default function App() {
   const leadsPageRef = useRef(leadsPage);
   leadsPageRef.current = leadsPage;
 
+  const fetchHourlyStats = async (campaignId: number | 'all' = selectedCampaignId || 'all', sH: number = startHour, eH: number = endHour) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/hourly-stats?campaignId=${campaignId}&startHour=${sH}&endHour=${eH}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHourlyData(data);
+      }
+    } catch (err) {
+      console.error('Error fetching hourly stats:', err);
+    }
+  };
+
   // Auto-refresh contínuo do dashboard a cada 3 segundos preservando filtros e busca
   useEffect(() => {
     fetchStats();
@@ -241,13 +335,14 @@ export default function App() {
       fetchStats();
       fetchCampaigns();
       fetchOccurrences(selectedCampaignId || 'all');
+      fetchHourlyStats(selectedCampaignId || 'all', startHour, endHour);
       if (selectedCampaignId) {
         fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [selectedCampaignId, leadsPage, statusFilter, searchTerm]);
+  }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour]);
 
   const fetchStats = async () => {
     try {
@@ -414,78 +509,6 @@ export default function App() {
     }
   };
 
-  // Simular retorno do webhook do n8n para fins de teste sem webhook real
-  const handleSimulateWebhook = async () => {
-    if (!selectedCampaignId) return;
-    setSimulating(true);
-    
-    try {
-      // Obter leads da campanha selecionada que ainda estão marcados como 'processing' ou 'pending'
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${selectedCampaignId}/leads?page=1&limit=100`);
-      if (res.ok) {
-        const data = await res.json();
-        const pendingOrProcessing = data.leads.filter((l: Lead) => 
-          l.call_status === 'processing' || l.call_status === 'pending'
-        );
-
-        if (pendingOrProcessing.length === 0) {
-          alert('Não há leads pendentes nesta campanha para simular.');
-          setSimulating(false);
-          return;
-        }
-
-        alert(`Simulando resposta do n8n para ${pendingOrProcessing.length} leads. Isso atualizará os status para Concluído/Falha em lotes...`);
-
-        // Disparar atualizações em paralelo para os leads simulados
-        const promises = pendingOrProcessing.map(async (l: Lead) => {
-          const callSuccess = Math.random() > 0.20; // 80% de sucesso
-          const smsSuccess = Math.random() > 0.05;  // 95% de sucesso
-
-          // Mapear ocorrências simuladas com base no sucesso da chamada
-          let occurrence = 'TENTATIVA - NÃO ATENDE';
-          if (callSuccess) {
-            const rand = Math.random();
-            if (rand < 0.4) occurrence = 'PROMESSA BOLETO';
-            else if (rand < 0.7) occurrence = 'ALEGA PAGAMENTO - SEM COMPROVANTE';
-            else if (rand < 0.85) occurrence = 'ROBO SOLICITA ATENDIMENTO HUMANO ';
-            else occurrence = 'CLIENTE DESCONHECIDO';
-          } else {
-            const rand = Math.random();
-            if (rand < 0.5) occurrence = 'TENTATIVA - MAQUINA MENSAGEM AUTOMATICA';
-            else if (rand < 0.8) occurrence = 'TENTATIVA - ABANDONO';
-            else occurrence = 'TENTATIVA - NÃO ATENDE';
-          }
-
-          await fetch(`${BACKEND_URL}/api/leads/update`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              lead_id: l.id,
-              call_status: callSuccess ? 'completed' : 'failed',
-              call_log: callSuccess 
-                ? `[SIMULADOR] Chamada atendida. Ocorrência: ${occurrence}.` 
-                : `[SIMULADOR] Chamada não completada. Ocorrência: ${occurrence}.`,
-              sms_status: smsSuccess ? 'completed' : 'failed',
-              sms_log: smsSuccess 
-                ? '[SIMULADOR] SMS Entregue e Lido' 
-                : '[SIMULADOR] Falha na rede SMS / Operadora.',
-              occurrence: occurrence
-            })
-          });
-        });
-
-        await Promise.all(promises);
-        fetchCampaigns();
-        fetchStats();
-        fetchLeads(selectedCampaignId, leadsPage);
-      }
-    } catch (err) {
-      console.error('Erro na simulação do webhook:', err);
-    } finally {
-      setSimulating(false);
-    }
-  };
-
   const formatBRL = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
@@ -583,311 +606,327 @@ export default function App() {
         {/* Área de Visualização */}
         <div className="p-8 flex-1 space-y-8">
           
-          {/* TAB 1: DASHBOARD */}
-          {activeTab === 'dashboard' && (
-            <>
-              {/* Cards de Métricas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">Campanhas Criadas</span>
-                  <div className="flex items-baseline justify-between mt-2">
-                    <span className="text-3xl font-extrabold text-slate-800">{stats.total_campaigns}</span>
-                    <span className="bg-vero-magenta/10 text-vero-magenta text-xs font-bold px-2 py-0.5 rounded">Ativas</span>
-                  </div>
-                </div>
+          {/* TAB 1: DASHBOARD OPERACIONAL */}
+          {activeTab === 'dashboard' && (() => {
+            const activeCampaign = (selectedCampaignId && selectedCampaignId !== 'all')
+              ? campaigns.find(c => c.id === selectedCampaignId)
+              : (campaigns.find(c => c.status === 'processing') || campaigns[0]);
 
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">Leads Carregados</span>
-                  <div className="flex items-baseline justify-between mt-2">
-                    <span className="text-3xl font-extrabold text-slate-800">{stats.total_leads ? stats.total_leads.toLocaleString() : 0}</span>
-                    <span className="text-slate-400 text-xs">Total acumulado</span>
-                  </div>
-                </div>
+            const totalDiscados = (selectedCampaignId && selectedCampaignId !== 'all')
+              ? (activeCampaign ? activeCampaign.processed_leads : 0)
+              : (stats.total_processed || 0);
 
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">
-                    Ligações por {systemInfo?.providerName || 'VAPI'}
-                  </span>
-                  <div className="flex items-baseline justify-between mt-2">
-                    <span className="text-3xl font-extrabold text-slate-800">
-                      {stats.total_successful_calls ? stats.total_successful_calls.toLocaleString() : 0}
-                    </span>
-                    <span className="text-green-500 text-xs font-bold flex items-center gap-0.5">
-                      ✓ {stats.total_processed ? Math.round((stats.total_successful_calls / stats.total_processed) * 100 || 0) : 0}%
-                    </span>
-                  </div>
-                </div>
+            const totalAtendidas = (selectedCampaignId && selectedCampaignId !== 'all')
+              ? (activeCampaign ? activeCampaign.successful_calls : 0)
+              : (stats.total_successful_calls || 0);
 
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <span className="text-xs font-medium text-slate-400 uppercase tracking-wider block">SMS Enviados</span>
-                  <div className="flex items-baseline justify-between mt-2">
-                    <span className="text-3xl font-extrabold text-slate-800">
-                      {stats.total_successful_sms ? stats.total_successful_sms.toLocaleString() : 0}
-                    </span>
-                    <span className="text-green-500 text-xs font-bold flex items-center gap-0.5">
-                      ✓ {stats.total_processed ? Math.round((stats.total_successful_sms / stats.total_processed) * 100 || 0) : 0}%
-                    </span>
-                  </div>
-                </div>
-              </div>
+            const totalSms = (selectedCampaignId && selectedCampaignId !== 'all')
+              ? (activeCampaign ? activeCampaign.successful_sms : 0)
+              : (stats.total_successful_sms || 0);
 
-              {/* Grid Principal do Painel */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Tabela de Campanhas Recentes (Lado Esquerdo - 2/3) */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4 lg:col-span-2">
-                  <h3 className="text-base font-bold text-slate-800">Campanhas Recentes</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm text-slate-600">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400 font-semibold">
-                          <th className="py-3 px-4">Nome da Campanha</th>
-                          <th className="py-3 px-4">Data de Criação</th>
-                          <th className="py-3 px-4 text-center">Total Leads</th>
-                          <th className="py-3 px-4">Progresso Geral</th>
-                          <th className="py-3 px-4 text-center">Ligações</th>
-                          <th className="py-3 px-4 text-center">SMS</th>
-                          <th className="py-3 px-4 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {campaigns.length > 0 ? (
-                          campaigns.map(c => {
-                            const pct = c.total_leads > 0 ? Math.round((c.processed_leads / c.total_leads) * 100) : 0;
-                            return (
-                              <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="py-3.5 px-4 font-semibold text-slate-700">{c.name}</td>
-                                <td className="py-3.5 px-4">{new Date(c.created_at).toLocaleDateString('pt-BR')}</td>
-                                <td className="py-3.5 px-4 text-center font-medium">{c.total_leads.toLocaleString()}</td>
-                                <td className="py-3.5 px-4 w-1/5">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-full bg-slate-100 rounded-full h-2">
-                                      <div 
-                                        className="bg-vero-magenta h-2 rounded-full" 
-                                        style={{ width: `${pct}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-xs font-bold text-slate-700">{pct}%</span>
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-4 text-center text-xs">
-                                  <span className="text-green-600 font-semibold">{c.successful_calls}</span>
-                                  <span className="text-slate-300 mx-1">/</span>
-                                  <span className="text-red-500 font-semibold">{c.failed_calls}</span>
-                                </td>
-                                <td className="py-3.5 px-4 text-center text-xs">
-                                  <span className="text-green-600 font-semibold">{c.successful_sms}</span>
-                                  <span className="text-slate-300 mx-1">/</span>
-                                  <span className="text-red-500 font-semibold">{c.failed_sms}</span>
-                                </td>
-                                <td className="py-3.5 px-4 text-center">
-                                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                    c.status === 'completed' && 'bg-green-50 text-green-700'
-                                  } ${
-                                    c.status === 'processing' && 'bg-amber-50 text-amber-700 animate-pulse'
-                                  } ${
-                                    c.status === 'failed' && 'bg-red-50 text-red-700'
-                                  } ${
-                                    c.status === 'pending' && 'bg-slate-100 text-slate-700 border border-slate-300'
-                                  }`}>
-                                    {c.status === 'completed' && 'Concluído'}
-                                    {c.status === 'processing' && 'Processando'}
-                                    {c.status === 'failed' && 'Pausada'}
-                                    {c.status === 'pending' && 'Pendente'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={7} className="py-8 text-center text-slate-400">
-                              Nenhuma campanha encontrada no banco de dados.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+            const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
+            const localizacaoRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
+            const conversaoRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
 
-                {/* Resumo da Campanha Ativa (Lado Direito - 1/3) */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between lg:col-span-1">
+            const tabulationPieData = occurrences.length > 0 ? occurrences.map(o => {
+              const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
+              const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
+              const color = isAnswered ? '#10b981' : is3Days ? '#f59e0b' : '#f43f5e';
+              return {
+                name: o.occurrence,
+                value: o.count,
+                color: color
+              };
+            }) : [
+              { name: 'NÃO ATENDEU', value: 1, color: '#f43f5e' }
+            ];
+
+            return (
+              <div className="space-y-6">
+                {/* Header Breadcrumb & Filtros Operacionais */}
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-base font-bold text-slate-800 mb-4">Campanha Ativa</h3>
-                    {(() => {
-                      const activeCampaign = campaigns.find(c => c.id === selectedCampaignId) || campaigns.find(c => c.status === 'processing') || campaigns[0];
-                      if (!activeCampaign) {
-                        return (
-                          <div className="text-center py-8 text-slate-400 text-xs">
-                            Nenhuma campanha encontrada. Suba uma planilha para começar.
-                          </div>
-                        );
-                      }
-                      const c = activeCampaign;
-                      const pct = Math.round((c.processed_leads / c.total_leads) * 100);
-                      return (
-                        <div key={c.id} className="space-y-4">
-                          <div>
-                            <div className="flex justify-between text-sm mb-1">
-                              <span className="font-semibold text-slate-700">{c.name}</span>
-                              <span className="font-bold text-vero-magenta">{pct}%</span>
-                            </div>
-                            <div className="w-full bg-slate-100 rounded-full h-3">
-                              <div 
-                                className="bg-vero-magenta h-3 rounded-full transition-all duration-500" 
-                                style={{ width: `${pct}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-xs text-slate-400 mt-1 block">
-                              {c.processed_leads.toLocaleString()} de {c.total_leads.toLocaleString()} leads enviados
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
-                            <div>
-                              <span className="text-slate-400 block">Ligações Atendidas</span>
-                              <strong className="text-emerald-600 text-base">{c.successful_calls}</strong>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 block">Ligações Não Atendidas</span>
-                              <strong className="text-slate-500 text-base">{c.failed_calls}</strong>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 block">SMS Enviados</span>
-                              <strong className="text-emerald-600 text-base">{c.successful_sms}</strong>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 block">SMS Não Enviados</span>
-                              <strong className="text-slate-500 text-base">{c.failed_sms}</strong>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2">
-                            {c.status === 'processing' ? (
-                              <button 
-                                onClick={() => handleCancelCampaign(c.id)}
-                                className="w-full py-2 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-100 transition flex items-center justify-center gap-1 font-bold"
-                              >
-                                ⏸️ Pausar Campanha
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => handleStartCampaign(c.id)}
-                                className="w-full py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition flex items-center justify-center gap-1 font-bold"
-                              >
-                                <Play size={14} />
-                                {c.status === 'pending' ? 'Disparar Campanha' : 'Continuar Discagem'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Painel do Simulador de n8n no Dashboard */}
-                  {campaigns.some(c => c.status === 'processing') && (
-                    <div className="mt-6 border-t border-slate-100 pt-4 bg-purple-50/50 p-3 rounded-lg border border-purple-100">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-purple-700 mb-2">
-                        <Sparkles size={14} />
-                        Simulador de Teste Rápido
-                      </div>
-                      <p className="text-[11px] text-purple-600/90 mb-3 leading-relaxed">
-                        Seu backend está configurado para mandar leads ao n8n. Clique abaixo para simular que o n8n concluiu as ligações.
-                      </p>
-                      <button 
-                        onClick={handleSimulateWebhook}
-                        disabled={simulating}
-                        className="w-full py-2 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-1"
-                      >
-                        {simulating ? 'Processando simulação...' : 'Simular Retorno do n8n (Webhook)'}
-                      </button>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1">
+                      <span>Dashboards</span>
+                      <span>›</span>
+                      <span>Painéis</span>
+                      <span>›</span>
+                      <span className="text-slate-700 font-bold">Dashboard Operacional</span>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Ocorrências e Tabulações da Operação */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mt-8 space-y-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800">Distribuição de Ocorrências (Tabulações DDM)</h3>
-                    <p className="text-xs text-slate-400">Classificação em tempo real com base nos retornos da VAPI e SMS</p>
+                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">Dashboard Operacional</h1>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-500">Filtrar por Campanha:</span>
-                    <select
-                      value={selectedCampaignId || 'all'}
-                      onChange={(e) => {
-                        const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
-                        if (val === 'all') {
-                          setSelectedCampaignId(null);
-                          fetchOccurrences('all');
-                        } else {
-                          setSelectedCampaignId(val);
-                          fetchOccurrences(val);
-                        }
-                      }}
-                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-vero-magenta"
-                    >
-                      <option value="all">Todas as Campanhas</option>
-                      {campaigns.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+
+                  {/* Barra de Filtros: Data, Campanhas/Filas, Filtro de Horas, Badge Discados */}
+                  <div className="flex flex-wrap items-center gap-4">
+                    {/* Filtro Data */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Data:</label>
+                      <input 
+                        type="date" 
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    {/* Campanhas e Filas */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Campanhas e Filas:</label>
+                      <select 
+                        value={selectedCampaignId || 'all'}
+                        onChange={(e) => {
+                          const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                          if (val === 'all') {
+                            setSelectedCampaignId(null);
+                            fetchOccurrences('all');
+                            fetchHourlyStats('all', startHour, endHour);
+                          } else {
+                            setSelectedCampaignId(val);
+                            fetchOccurrences(val);
+                            fetchHourlyStats(val, startHour, endHour);
+                            fetchLeads(val, 1);
+                          }
+                        }}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-cyan-500 min-w-[200px]"
+                      >
+                        <option value="all">Todas as Filas Selecionadas</option>
+                        {campaigns.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filtro de Horas */}
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">Hora Inicial:</label>
+                        <select 
+                          value={startHour}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setStartHour(val);
+                            fetchHourlyStats(selectedCampaignId || 'all', val, endHour);
+                          }}
+                          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-cyan-500"
+                        >
+                          {[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(h => (
+                            <option key={h} value={h}>{h}h</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">Hora Final:</label>
+                        <select 
+                          value={endHour}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setEndHour(val);
+                            fetchHourlyStats(selectedCampaignId || 'all', startHour, val);
+                          }}
+                          className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:border-cyan-500"
+                        >
+                          {[9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].map(h => (
+                            <option key={h} value={h}>{h}h</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Badge Discados (Ciano) */}
+                    <div className="bg-cyan-500 text-white px-5 py-2.5 rounded-lg shadow-sm flex items-center justify-between gap-4 font-bold shrink-0">
+                      <span className="text-xs uppercase tracking-wider text-cyan-100">Discados</span>
+                      <span className="text-xl tracking-tight font-black">{totalDiscados.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
 
-                {occurrences.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                    {occurrences.map(o => {
-                      const totalCount = occurrences.reduce((acc, curr) => acc + curr.count, 0);
-                      const pct = totalCount > 0 ? Math.round((o.count / totalCount) * 100) : 0;
-                      const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
-                      const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
+                {/* LINHA 1: Funil de Valores + 3 Gauges de BI */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Card de Valores */}
+                  <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between min-h-[210px]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-700">Valores</span>
+                    </div>
 
-                      const textColor = isAnswered ? 'text-emerald-700' : is3Days ? 'text-amber-700' : 'text-rose-700';
-                      const badgeBg = isAnswered 
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                        : is3Days 
-                        ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                        : 'bg-rose-50 text-rose-700 border-rose-200';
-                      const barColor = isAnswered ? 'bg-emerald-500' : is3Days ? 'bg-amber-500' : 'bg-rose-500';
-
-                      return (
-                        <div key={o.occurrence} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex flex-col justify-between">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className={`text-xs font-bold leading-tight line-clamp-2 ${textColor}`} title={o.occurrence}>
-                              {o.occurrence}
-                            </span>
-                            <span className={`border text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${badgeBg}`}>
-                              {o.count}
-                            </span>
-                          </div>
-                          <div className="mt-3">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-                              <span>Proporção na Operação</span>
-                              <span className="font-semibold">{pct}%</span>
-                            </div>
-                            <div className="w-full bg-slate-200 rounded-full h-1.5">
-                              <div
-                                className={`h-1.5 rounded-full ${barColor}`}
-                                style={{ width: `${pct}%` }}
-                              ></div>
-                            </div>
-                          </div>
+                    <div className="space-y-2.5">
+                      {/* AD/PA (Alô) */}
+                      <div>
+                        <div className="flex justify-between text-[11px] mb-1">
+                          <span className="font-bold text-slate-600">AD/PA (Alô)</span>
+                          <span className="font-bold text-teal-600">{hitRate.toFixed(2).replace('.', ',')}% • {totalAtendidas.toLocaleString()}</span>
                         </div>
-                      );
-                    })}
+                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="bg-teal-500 h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, hitRate)}%` }} />
+                        </div>
+                      </div>
+
+                      {/* CPC */}
+                      <div>
+                        <div className="flex justify-between text-[11px] mb-1">
+                          <span className="font-bold text-slate-600">CPC</span>
+                          <span className="font-bold text-cyan-600">{localizacaoRate.toFixed(2).replace('.', ',')}% • {totalAtendidas.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="bg-cyan-500 h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, localizacaoRate)}%` }} />
+                        </div>
+                      </div>
+
+                      {/* CPCA / SMS */}
+                      <div>
+                        <div className="flex justify-between text-[11px] mb-1">
+                          <span className="font-bold text-slate-600">SMS / Linha Digitável</span>
+                          <span className="font-bold text-emerald-600">{conversaoRate.toFixed(2).replace('.', ',')}% • {totalSms.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="bg-emerald-500 h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, conversaoRate)}%` }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-semibold">Total Atendidas:</span>
+                      <strong className="text-emerald-700 font-black">{totalAtendidas.toLocaleString()} leads</strong>
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-10 text-slate-400 text-sm">
-                    Nenhuma ocorrência tabulada nas campanhas até o momento.
+
+                  {/* Gauge 1: Hit Rate */}
+                  <SemiCircleGauge 
+                    value={hitRate} 
+                    label="Hit Rate" 
+                    color="#00a4b4" 
+                    tooltipInfo="Taxa de ligações conectadas (Alô) em relação ao total de discagens"
+                  />
+
+                  {/* Gauge 2: Localização */}
+                  <SemiCircleGauge 
+                    value={localizacaoRate} 
+                    label="Localização" 
+                    color="#0ea5e9" 
+                    tooltipInfo="Taxa de contato com a pessoa certa (CPC) e transmissão da mensagem"
+                  />
+
+                  {/* Gauge 3: Conversão */}
+                  <SemiCircleGauge 
+                    value={conversaoRate} 
+                    label="Conversão" 
+                    color="#10b981" 
+                    tooltipInfo="Taxa de envio da linha digitável e SMS sobre as chamadas atendidas"
+                  />
+                </div>
+
+                {/* LINHA 2: Gráficos Operacionais (Barras por Horário + Rosca de Tabulações) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Gráfico de Barras por Horário */}
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 lg:col-span-2">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-800">Resultados das Discagens (por Horário)</h3>
+                        <p className="text-[11px] text-slate-400">Volumetria e status das chamadas em cada hora do dia</p>
+                      </div>
+                    </div>
+                    <div className="h-[270px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={hourlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <XAxis dataKey="hour" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
+                          <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
+                          <RechartsTooltip contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+                          <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                          <Bar dataKey="atendeu" name="🟢 Atendeu (Alô)" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
+                          <Bar dataKey="naoAtendeu" name="🔴 Não Atende" stackId="a" fill="#f43f5e" radius={[0, 0, 0, 0]} />
+                          <Bar dataKey="quarentena3Dias" name="🟡 SMS 3 Dias" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Gráfico Donut de Tabulações */}
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 lg:col-span-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800 mb-1">Distribuição das Tabulações</h3>
+                      <p className="text-[11px] text-slate-400 mb-4">Divisão proporcional das 3 tabulações oficiais</p>
+                      <div className="h-[230px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={tabulationPieData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={4}
+                              dataKey="value"
+                            >
+                              {tabulationPieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+                            <Legend wrapperStyle={{ fontSize: '11px' }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LINHA 3: Painel de Controle da Campanha Selecionada */}
+                {activeCampaign && (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-bold text-slate-800">{activeCampaign.name}</h3>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            activeCampaign.status === 'completed' && 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          } ${
+                            activeCampaign.status === 'processing' && 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
+                          } ${
+                            activeCampaign.status === 'failed' && 'bg-rose-50 text-rose-700 border border-rose-200'
+                          } ${
+                            activeCampaign.status === 'pending' && 'bg-slate-100 text-slate-700 border border-slate-300'
+                          }`}>
+                            {activeCampaign.status === 'completed' && 'Concluído'}
+                            {activeCampaign.status === 'processing' && 'Em Execução'}
+                            {activeCampaign.status === 'failed' && 'Pausada'}
+                            {activeCampaign.status === 'pending' && 'Pendente'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {activeCampaign.processed_leads.toLocaleString()} de {activeCampaign.total_leads.toLocaleString()} leads processados ({Math.round((activeCampaign.processed_leads / activeCampaign.total_leads) * 100 || 0)}%)
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {activeCampaign.status === 'processing' ? (
+                          <button 
+                            onClick={() => handleCancelCampaign(activeCampaign.id)}
+                            className="px-5 py-2.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-bold hover:bg-amber-100 transition flex items-center gap-1.5 shadow-sm"
+                          >
+                            ⏸️ Pausar Discagem
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => handleStartCampaign(activeCampaign.id)}
+                            className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Play size={14} />
+                            {activeCampaign.status === 'pending' ? 'Iniciar Discagem' : 'Continuar Discagem'}
+                          </button>
+                        )}
+                        <a 
+                          href={`${BACKEND_URL}/api/campaigns/${activeCampaign.id}/export?filter=answered`}
+                          className="px-4 py-2.5 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 transition flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Download size={14} />
+                          Exportar Atendidas
+                        </a>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            </>
-          )}
+            );
+          })()}
 
           {/* TAB 2: CAMPANHAS (Upload e Controle) */}
           {activeTab === 'campaigns' && (
