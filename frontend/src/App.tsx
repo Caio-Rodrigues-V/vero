@@ -361,14 +361,14 @@ export default function App() {
 
   // Auto-refresh contínuo do dashboard a cada 3 segundos preservando filtros e busca
   useEffect(() => {
-    fetchStats();
+    fetchStats(selectedCampaignId, selectedDate);
     fetchCampaigns();
     fetchOccurrences(selectedCampaignId);
     fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
     fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
 
     const interval = setInterval(() => {
-      fetchStats();
+      fetchStats(selectedCampaignId, selectedDate);
       fetchCampaigns();
       fetchOccurrences(selectedCampaignId);
       fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
@@ -378,9 +378,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour, selectedDate]);
 
-  const fetchStats = async () => {
+  const fetchStats = async (campaignId: number | 'all' = selectedCampaignId, dt: string = selectedDate) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats`);
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats?campaignId=${campaignId}&date=${dt}`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -673,7 +673,8 @@ export default function App() {
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
-            const conversaoRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
+            const conversaoRate = totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0;
+            const conversaoAloRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
 
             const tabulationPieData = occurrences.length > 0 ? occurrences.map(o => {
               const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
@@ -718,7 +719,12 @@ export default function App() {
                       <input 
                         type="date" 
                         value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
+                        onChange={(e) => {
+                          const dt = e.target.value;
+                          setSelectedDate(dt);
+                          fetchStats(selectedCampaignId, dt);
+                          fetchHourlyStats(selectedCampaignId, startHour, endHour, dt);
+                        }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
                       />
                     </div>
@@ -749,7 +755,7 @@ export default function App() {
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setStartHour(val);
-                          fetchHourlyStats(selectedCampaignId || 'all', val, endHour, selectedDate);
+                          fetchHourlyStats(selectedCampaignId, val, endHour, selectedDate);
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
                       >
@@ -763,7 +769,7 @@ export default function App() {
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setEndHour(val);
-                          fetchHourlyStats(selectedCampaignId || 'all', startHour, val, selectedDate);
+                          fetchHourlyStats(selectedCampaignId, startHour, val, selectedDate);
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
                       >
@@ -800,7 +806,7 @@ export default function App() {
                   <ModernKPICard 
                     title="2. Volume Discado"
                     value={totalDiscados.toLocaleString('pt-BR')}
-                    subtitle="Volume total de tentativas na base"
+                    subtitle={`${(totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100).toFixed(1).replace('.', ',')}% da base discada`}
                     progress={totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100}
                     colorTheme="cyan"
                     indicatorText="Discagens"
@@ -816,8 +822,8 @@ export default function App() {
                   <ModernKPICard 
                     title="4. SMS Enviados"
                     value={totalSms.toLocaleString('pt-BR')}
-                    subtitle={`${conversaoRate.toFixed(2).replace('.', ',')}% das ligações atendidas`}
-                    progress={conversaoRate}
+                    subtitle={`${conversaoAloRate.toFixed(1).replace('.', ',')}% das ligações atendidas`}
+                    progress={Math.min(100, conversaoRate * 5)}
                     colorTheme="emerald"
                     indicatorText="Linha Digitável"
                   />
@@ -916,7 +922,12 @@ export default function App() {
                     {/* Etapa 2: Discagens */}
                     <div className="flex flex-col gap-2.5">
                       <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">2. Volume Discado</span>
-                      <FlowNode title="Tentativas Realizadas" count={totalDiscados} pct="100%" status="primary" />
+                      <FlowNode 
+                        title="Tentativas Realizadas" 
+                        count={totalDiscados} 
+                        pct={`${(totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100).toFixed(2).replace('.', ',')}%`} 
+                        status="primary" 
+                      />
                     </div>
 
                     {/* Etapa 3: Taxa de Alô */}
@@ -929,9 +940,14 @@ export default function App() {
                     {/* Etapa 4: SMS Enviados */}
                     <div className="flex flex-col gap-2.5">
                       <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">4. SMS Enviados</span>
-                      <FlowNode title="✉️ SMS ENVIADO COM SUCESSO" count={totalSms} pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} status="success" />
+                      <FlowNode 
+                        title="✉️ SMS ENVIADO COM SUCESSO" 
+                        count={totalSms} 
+                        pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} 
+                        status="success" 
+                      />
                       {totalAtendidas > totalSms && (
-                        <FlowNode title="🟡 SMS ENVIADO 3 DIAS" count={totalAtendidas - totalSms} pct={`${(100 - conversaoRate).toFixed(2).replace('.', ',')}%`} status="warning" />
+                        <FlowNode title="🟡 SMS ENVIADO 3 DIAS" count={totalAtendidas - totalSms} pct={`${(100 - (totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0)).toFixed(2).replace('.', ',')}%`} status="warning" />
                       )}
                     </div>
                   </div>

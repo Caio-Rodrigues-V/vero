@@ -67,13 +67,50 @@ function recalculateActiveCampaigns() {
 }
 
 /**
- * Rota para obter estatísticas resumidas da Dashboard
+ * Rota para obter estatísticas resumidas da Dashboard (com suporte a filtro de data e campanha)
  */
 app.get('/api/dashboard/stats', (req, res) => {
+  const { campaignId, date } = req.query;
   try {
     recalculateActiveCampaigns();
 
-    const stats = get(`
+    if (date) {
+      let query = `
+        SELECT 
+          COUNT(id) as total_leads,
+          SUM(CASE WHEN call_status != 'pending' THEN 1 ELSE 0 END) as total_processed,
+          SUM(CASE WHEN call_status = 'completed' OR occurrence LIKE '%ATENDEU%' THEN 1 ELSE 0 END) as total_successful_calls,
+          SUM(CASE WHEN call_status = 'failed' AND (occurrence NOT LIKE '%ATENDEU%' OR occurrence IS NULL) THEN 1 ELSE 0 END) as total_failed_calls,
+          SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
+          SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms
+        FROM leads
+        WHERE date(datetime(updated_at, '-3 hours')) = date(?)
+      `;
+      const params = [date];
+      if (campaignId && campaignId !== 'all') {
+        query += ' AND campaign_id = ?';
+        params.push(campaignId);
+      }
+
+      const dayStats = get(query, params) || {};
+      
+      const campStats = get('SELECT COUNT(id) as total_campaigns, SUM(total_leads) as total_base FROM campaigns');
+
+      return res.json({
+        total_campaigns: campStats ? campStats.total_campaigns : 0,
+        total_leads: (campaignId && campaignId !== 'all') 
+          ? (get('SELECT total_leads FROM campaigns WHERE id = ?', [campaignId])?.total_leads || dayStats.total_leads || 0)
+          : (campStats ? campStats.total_base : (dayStats.total_leads || 0)),
+        total_processed: dayStats.total_processed || 0,
+        total_successful_calls: dayStats.total_successful_calls || 0,
+        total_failed_calls: dayStats.total_failed_calls || 0,
+        total_successful_sms: dayStats.total_successful_sms || 0,
+        total_failed_sms: dayStats.total_failed_sms || 0,
+      });
+    }
+
+    // Sem filtro de data: totais acumulados de campanhas
+    let query = `
       SELECT 
         COUNT(id) as total_campaigns,
         SUM(total_leads) as total_leads,
@@ -83,9 +120,26 @@ app.get('/api/dashboard/stats', (req, res) => {
         SUM(successful_sms) as total_successful_sms,
         SUM(failed_sms) as total_failed_sms
       FROM campaigns
-    `);
+    `;
+    const params = [];
+    if (campaignId && campaignId !== 'all') {
+      query = `
+        SELECT 
+          1 as total_campaigns,
+          total_leads,
+          processed_leads as total_processed,
+          successful_calls as total_successful_calls,
+          failed_calls as total_failed_calls,
+          successful_sms as total_successful_sms,
+          failed_sms as total_failed_sms
+        FROM campaigns
+        WHERE id = ?
+      `;
+      params.push(campaignId);
+    }
 
-    // Valores padrão se o banco estiver vazio
+    const stats = get(query, params) || {};
+
     const response = {
       total_campaigns: stats.total_campaigns || 0,
       total_leads: stats.total_leads || 0,
