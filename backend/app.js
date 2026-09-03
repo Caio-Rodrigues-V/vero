@@ -1583,6 +1583,14 @@ app.get('*', (req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
   
+  // Atualizar ocorrências legadas de chamadas atendidas para a tabulação oficial
+  try {
+    run(`UPDATE leads 
+         SET occurrence = 'CONFIRMOU CONTATO - ENVIO SMS' 
+         WHERE call_status = 'completed' 
+           AND (occurrence IS NULL OR occurrence LIKE '%DESLIGOU%' OR occurrence LIKE '%MUDA%' OR occurrence LIKE '%PROMESSA BOLETO%' OR occurrence LIKE '%ABANDONO%')`);
+  } catch (e) {}
+
   // Auto-retomar somente campanhas que já estavam em processamento quando o servidor reiniciou.
   try {
     const activeCampaigns = all("SELECT id FROM campaigns WHERE status = 'processing' ORDER BY id DESC LIMIT 1");
