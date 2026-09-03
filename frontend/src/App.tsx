@@ -226,7 +226,14 @@ export default function App() {
       .catch(err => console.error('Error fetching live lead details:', err));
   };
 
-  // Auto-refresh contínuo do dashboard a cada 3 segundos para acompanhar todas as chamadas da Vapi ao vivo
+  const statusFilterRef = useRef(statusFilter);
+  statusFilterRef.current = statusFilter;
+  const searchTermRef = useRef(searchTerm);
+  searchTermRef.current = searchTerm;
+  const leadsPageRef = useRef(leadsPage);
+  leadsPageRef.current = leadsPage;
+
+  // Auto-refresh contínuo do dashboard a cada 3 segundos preservando filtros e busca
   useEffect(() => {
     fetchStats();
     fetchCampaigns();
@@ -236,12 +243,12 @@ export default function App() {
       fetchCampaigns();
       fetchOccurrences(selectedCampaignId || 'all');
       if (selectedCampaignId) {
-        fetchLeads(selectedCampaignId, leadsPage);
+        fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [selectedCampaignId, leadsPage]);
+  }, [selectedCampaignId, leadsPage, statusFilter, searchTerm]);
 
   const fetchStats = async () => {
     try {
@@ -261,12 +268,9 @@ export default function App() {
       if (res.ok) {
         const data: Campaign[] = await res.json();
         setCampaigns(data);
-        if (data.length > 0) {
-          const currentId = selectedCampaignId;
-          const isValidId = currentId === 'all' || (typeof currentId === 'number' && data.some(c => c.id === currentId));
-          const targetId = isValidId && currentId !== null ? currentId : data[0].id;
-          setSelectedCampaignId(targetId);
-          fetchLeads(targetId, leadsPage);
+        if (data.length > 0 && selectedCampaignId === null) {
+          setSelectedCampaignId(data[0].id);
+          fetchLeads(data[0].id, 1, statusFilterRef.current, searchTermRef.current);
         }
       }
     } catch (err) {
@@ -284,14 +288,14 @@ export default function App() {
         body: JSON.stringify({ campaignId: selectedCampaignId })
       });
       if (selectedCampaignId) {
-        fetchLeads(selectedCampaignId, leadsPage);
+        fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
       }
     } catch (e) {
       console.error('Error syncing recordings:', e);
     }
   };
 
-  const fetchLeads = async (campaignId: number | 'all', page: number, currentStatusFilter: string = statusFilter, currentSearchTerm: string = searchTerm) => {
+  const fetchLeads = async (campaignId: number | 'all', page: number = leadsPageRef.current, currentStatusFilter: string = statusFilterRef.current, currentSearchTerm: string = searchTermRef.current) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/${campaignId}/leads?page=${page}&limit=10&statusFilter=${currentStatusFilter}&search=${encodeURIComponent(currentSearchTerm)}`);
       if (res.ok) {
@@ -308,7 +312,7 @@ export default function App() {
   const handleCampaignSelect = (id: number | 'all') => {
     setSelectedCampaignId(id);
     setLeadsPage(1);
-    fetchLeads(id, 1);
+    fetchLeads(id, 1, statusFilterRef.current, searchTermRef.current);
     fetchOccurrences(id);
   };
 
@@ -905,13 +909,13 @@ export default function App() {
                       const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
                       const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
 
-                      const textColor = isAnswered ? 'text-emerald-700' : is3Days ? 'text-amber-700' : 'text-slate-700';
+                      const textColor = isAnswered ? 'text-emerald-700' : is3Days ? 'text-amber-700' : 'text-rose-700';
                       const badgeBg = isAnswered 
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                         : is3Days 
                         ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                        : 'bg-slate-100 text-slate-700 border-slate-200';
-                      const barColor = isAnswered ? 'bg-emerald-500' : is3Days ? 'bg-amber-500' : 'bg-slate-400';
+                        : 'bg-rose-50 text-rose-700 border-rose-200';
+                      const barColor = isAnswered ? 'bg-emerald-500' : is3Days ? 'bg-amber-500' : 'bg-rose-500';
 
                       return (
                         <div key={o.occurrence} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex flex-col justify-between">
@@ -1247,7 +1251,7 @@ export default function App() {
                       <option value="all">Todos os Leads</option>
                       <option value="delivered">🟢 Somente Ligações Atendidas</option>
                       <option value="sms_delivered">📲 Somente SMS Entregues</option>
-                      <option value="failed">🩶 Não Atendidas</option>
+                      <option value="failed">🔴 Somente Não Atendidas</option>
                       <option value="pending">⏳ Pendentes</option>
                     </select>
                   </div>
@@ -1305,7 +1309,7 @@ export default function App() {
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : (l.occurrence?.includes('3 DIAS') || l.occurrence?.includes('QUARENTENA'))
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
                             }`}>
                               {l.occurrence || 'NÃO ATENDEU'}
                             </span>
@@ -1313,14 +1317,14 @@ export default function App() {
                           
                           {/* Status Ligação */}
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded font-bold ${
-                              l.call_status === 'completed' && 'bg-green-50 text-green-700'
+                            <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                              l.call_status === 'completed' && 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             } ${
-                              l.call_status === 'processing' && 'bg-amber-50 text-amber-700'
+                              l.call_status === 'processing' && 'bg-amber-50 text-amber-700 border border-amber-200'
                             } ${
-                              l.call_status === 'calling' && 'bg-sky-50 text-sky-700 animate-pulse'
+                              l.call_status === 'calling' && 'bg-sky-50 text-sky-700 animate-pulse border border-sky-200'
                             } ${
-                              l.call_status === 'failed' && 'bg-slate-100 text-slate-600'
+                              l.call_status === 'failed' && 'bg-rose-50 text-rose-700 border border-rose-200'
                             } ${
                               l.call_status === 'pending' && 'bg-slate-100 text-slate-600'
                             }`}>
