@@ -661,6 +661,18 @@ export default function App() {
               ? (activeCampaign ? activeCampaign.successful_sms : 0)
               : (stats.total_successful_sms || 0);
 
+            // Cálculo dos Spins (Giros da Base): Soma do progresso proporcional das campanhas
+            const totalSpins = campaigns.reduce((acc, c) => {
+              if (!c.total_leads || c.total_leads === 0) return acc;
+              return acc + (c.processed_leads / c.total_leads);
+            }, 0);
+
+            const activeSpins = (selectedCampaignId && selectedCampaignId !== 'all')
+              ? (activeCampaign && activeCampaign.total_leads > 0 ? (activeCampaign.processed_leads / activeCampaign.total_leads) : 0)
+              : totalSpins;
+
+            const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const localizacaoRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const conversaoRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
@@ -772,6 +784,12 @@ export default function App() {
                       </select>
                     </div>
 
+                    {/* Badge Spins (Giros da Base) */}
+                    <div className="bg-sky-50 border border-sky-200/80 text-sky-950 px-3.5 py-2 rounded-lg flex items-center gap-2 shadow-2xs">
+                      <span className="text-xs font-semibold text-sky-700 uppercase tracking-wider">Spins:</span>
+                      <span className="text-sm font-bold tabular-nums text-sky-900">{formattedSpins}x</span>
+                    </div>
+
                     {/* Badge Discados (Compact SaaS Style) */}
                     <div className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-3 shadow-xs">
                       <span className="text-xs font-medium text-slate-300">Discados</span>
@@ -780,8 +798,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. Grid de KPIs Modernos (4 Cards Enterprise SaaS) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 2. Grid de KPIs Modernos (5 Cards Enterprise SaaS incluindo Spins) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   <ModernKPICard 
                     title="Hit Rate"
                     value={`${hitRate.toFixed(2).replace('.', ',')}%`}
@@ -805,6 +823,14 @@ export default function App() {
                     progress={conversaoRate}
                     colorTheme="emerald"
                     indicatorText="CPCA / Linha"
+                  />
+                  <ModernKPICard 
+                    title="Spins (Giros da Base)"
+                    value={`${formattedSpins} Giros`}
+                    subtitle={`${activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) 100% completo(s)` : 'Giro em andamento'}`}
+                    progress={Math.min(100, (activeSpins % 1) * 100 || (activeSpins > 0 ? 100 : 0))}
+                    colorTheme="cyan"
+                    indicatorText="Giros Concluídos"
                   />
                   <ModernKPICard 
                     title="Volume da Base"
