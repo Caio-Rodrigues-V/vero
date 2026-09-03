@@ -1290,15 +1290,13 @@ export default function App() {
                           <td className="py-3 px-4">{l.due_date}</td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-0.5 rounded border font-bold text-[10px] ${
-                              (l.occurrence?.includes('PROMESSA') || l.occurrence?.includes('PAGAMENTO')) 
-                                ? 'bg-green-50 text-green-700 border-green-200'
-                                : (l.occurrence?.includes('DESCONHECIDO') || l.occurrence?.includes('FALECIDO'))
-                                ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                : (l.occurrence?.includes('TENTATIVA') || l.occurrence?.includes('MUDA') || l.occurrence?.includes('NÃO ATENDE'))
-                                ? 'bg-slate-100 text-slate-700 border-slate-200'
-                                : 'bg-rose-50 text-vero-magenta border-rose-100'
+                              (l.occurrence?.includes('ATENDEU') || l.occurrence?.includes('CONFIRMOU') || l.occurrence?.includes('ENVIO SMS')) 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : (l.occurrence?.includes('3 DIAS') || l.occurrence?.includes('QUARENTENA'))
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}>
-                              {l.occurrence || 'AGUARDANDO CONTATO'}
+                              {l.occurrence || 'NÃO ATENDEU'}
                             </span>
                           </td>
                           

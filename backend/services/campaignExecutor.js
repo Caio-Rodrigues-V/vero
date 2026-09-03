@@ -106,16 +106,16 @@ async function processCampaign(campaignId, force = false) {
         );
 
         if (recentContact) {
-          console.log(`[EXECUTOR QUARENTENA] Lead #${lead.id} (${lead.phone} - ${lead.name}) foi contatado nos últimos 3 dias (Lead #${recentContact.id}). Ignorando.`);
+          console.log(`[EXECUTOR] Lead #${lead.id} (${lead.phone} - ${lead.name}) já recebeu SMS nos últimos 3 dias (Lead #${recentContact.id}).`);
           run(
             `UPDATE leads 
              SET call_status = 'failed', 
-                 occurrence = 'IGNORADO - CONTATADO RECENTEMENTE (QUARENTENA 3D)',
-                 call_log = 'Ignorado: Cliente contatado com sucesso nos últimos 3 dias (Quarentena 3d)',
+                 occurrence = 'SMS ENVIADO 3 DIAS',
+                 call_log = 'Ignorado: SMS já enviado nos últimos 3 dias.',
                  sms_status = 'failed',
-                 sms_log = 'Ignorado: Quarentena de 3d ativa.',
+                 sms_log = 'Ignorado: SMS já enviado nos últimos 3 dias.',
                  email_status = 'failed',
-                 email_log = 'Ignorado: Quarentena de 3d ativa.',
+                 email_log = 'Ignorado: SMS já enviado nos últimos 3 dias.',
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
             [lead.id]

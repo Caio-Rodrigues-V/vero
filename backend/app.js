@@ -246,29 +246,18 @@ app.post('/api/leads/sync-recordings', async (req, res) => {
  * Exportar resultados da campanha em formato CSV (suporta filtro por ocorrência)
  */
 function formatOccurrenceLabel(occ, callLog) {
-  if (callLog && (callLog.includes('Quarentena') || callLog.includes('Ignorado'))) return 'IGNORADO - CONTATADO RECENTEMENTE (QUARENTENA)';
-  if (callLog && callLog.includes('customer-busy')) return 'ATENDEU E DESLIGOU / OCUPADO';
-  if (callLog && callLog.includes('customer-did-not-answer')) return 'NÃO ATENDEU';
-  if (!occ) return 'ATENDEU E DESLIGOU';
+  if (callLog && (callLog.includes('3 dias') || callLog.includes('Ignorado') || callLog.includes('Quarentena'))) {
+    return 'SMS ENVIADO 3 DIAS';
+  }
+  if (!occ) return 'NÃO ATENDEU';
   const upper = occ.toUpperCase();
-  if (upper.includes('IGNORADO') || upper.includes('QUARENTENA')) return 'IGNORADO - CONTATADO RECENTEMENTE (QUARENTENA)';
-  if (upper.includes('CONFIRMOU CONTATO') || upper.includes('ENVIO SMS')) return 'CONFIRMOU CONTATO - ENVIO SMS';
-  if (upper.includes('PROMESSA BOLETO')) return 'CONFIRMOU CONTATO - ENVIO SMS';
-  if (upper.includes('PROMESSA PIX')) return 'PROMESSA PIX';
-  if (upper.includes('PROMESSA CART')) return 'PROMESSA CARTÃO';
-  if (upper.includes('ALEGA PAGAMENTO')) return 'ALEGA PAGAMENTO';
-  if (upper.includes('DESEMPREGADO')) return 'DESEMPREGADO';
-  if (upper.includes('CANCELAMENTO')) return 'SOLICITOU CANCELAMENTO';
-  if (upper.includes('HUMANO') || upper.includes('ATENDENTE')) return 'SOLICITOU ATENDENTE';
-  if (upper.includes('FINANCEIRO')) return 'PROBLEMA FINANCEIRO';
-  if (upper.includes('RETORNO')) return 'SOLICITOU RETORNO';
-  if (upper.includes('FALECIDO')) return 'CLIENTE FALECIDO';
-  if (upper.includes('DESCONHECIDO')) return 'NÚMERO ERRADO';
-  if (upper.includes('MAQUINA') || upper.includes('VOICEMAIL')) return 'CAIXA POSTAL';
-  if (upper.includes('OCUPADO')) return 'LINHA OCUPADA';
-  if (upper.includes('NÃO ATENDE')) return 'NÃO ATENDEU';
-  if (upper.includes('DESLIGOU') || upper.includes('MUDA')) return 'ATENDEU E DESLIGOU';
-  return occ;
+  if (upper.includes('3 DIAS') || upper.includes('QUARENTENA') || upper.includes('IGNORADO')) {
+    return 'SMS ENVIADO 3 DIAS';
+  }
+  if (upper.includes('ATENDEU') || upper.includes('CONFIRMOU') || upper.includes('ENVIO SMS') || upper.includes('PROMESSA') || upper.includes('ALEGA')) {
+    return 'ATENDEU - SMS ENVIADO';
+  }
+  return 'NÃO ATENDEU';
 }
 
 app.get('/api/campaigns/:id/export', (req, res) => {
@@ -1583,21 +1572,32 @@ app.get('*', (req, res, next) => {
 });
 
 /**
- * Rota para reclassificar todas as ocorrências legadas no banco
+ * Rota para reclassificar todas as ocorrências legadas no banco em 3 tabulações simples
  */
 app.post('/api/leads/reclassify-occurrences', (req, res) => {
   try {
+    // 1. Quem atendeu ou recebeu SMS -> ATENDEU - SMS ENVIADO
     const updated = run(`
       UPDATE leads 
-      SET occurrence = 'CONFIRMOU CONTATO - ENVIO SMS' 
-      WHERE (call_status = 'completed' OR sms_status = 'completed') 
-        AND (occurrence IS NULL 
-             OR occurrence LIKE '%DESLIGOU%' 
-             OR occurrence LIKE '%MUDA%' 
-             OR occurrence LIKE '%PROMESSA BOLETO%' 
-             OR occurrence LIKE '%ABANDONO%'
-             OR occurrence LIKE '%TENTATIVA%')
-        AND occurrence NOT IN ('FALECIDO', 'CLIENTE DESCONHECIDO', 'ALEGA PAGAMENTO - SEM COMPROVANTE', 'NAO PAGARA - DESEMPREGADO', 'NÃO PAGARÁ - SOLICITOU O CANCELAMENTO', 'ROBO SOLICITA ATENDIMENTO HUMANO', 'NÃO PAGARÁ - PROBLEMA FINANCEIRO', 'RETORNO AGENDADO COM CLIENTE', 'PROMESSA PIX', 'PROMESSA CARTÃO')
+      SET occurrence = 'ATENDEU - SMS ENVIADO' 
+      WHERE (call_status = 'completed' OR sms_status = 'completed')
+    `);
+
+    // 2. Quem foi pulado por envio nos últimos 3 dias -> SMS ENVIADO 3 DIAS
+    run(`
+      UPDATE leads 
+      SET occurrence = 'SMS ENVIADO 3 DIAS' 
+      WHERE (call_log LIKE '%3 dias%' OR call_log LIKE '%Ignorado%' OR call_log LIKE '%Quarentena%' OR occurrence LIKE '%3 DIAS%' OR occurrence LIKE '%QUARENTENA%')
+        AND call_status != 'completed'
+    `);
+
+    // 3. Demais não atendidas -> NÃO ATENDEU
+    run(`
+      UPDATE leads 
+      SET occurrence = 'NÃO ATENDEU' 
+      WHERE (occurrence IS NULL OR occurrence = '' OR occurrence LIKE '%TENTATIVA%' OR occurrence LIKE '%DESLIGOU%' OR occurrence LIKE '%MUDA%' OR occurrence LIKE '%FALECIDO%')
+        AND call_status != 'completed'
+        AND occurrence != 'SMS ENVIADO 3 DIAS'
     `);
 
     // Recalcular métricas de todas as campanhas
@@ -1606,7 +1606,7 @@ app.post('/api/leads/reclassify-occurrences', (req, res) => {
 
     res.json({
       success: true,
-      message: `Todas as ligações e SMS atendidos antigos foram reclassificados com sucesso como 'CONFIRMOU CONTATO - ENVIO SMS'.`,
+      message: `Todas as ocorrências foram simplificadas para as 3 tabulações oficiais com sucesso.`,
       changes: updated.changes
     });
   } catch (err) {
@@ -1617,39 +1617,41 @@ app.post('/api/leads/reclassify-occurrences', (req, res) => {
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
   
-  // Atualizar ocorrências legadas de chamadas atendidas para a tabulação oficial
+  // Atualizar ocorrências para as 3 tabulações oficiais simples
   try {
+    // 1. Quem atendeu ou recebeu SMS -> ATENDEU - SMS ENVIADO
     const res = run(`
       UPDATE leads 
-      SET occurrence = 'CONFIRMOU CONTATO - ENVIO SMS' 
-      WHERE (call_status = 'completed' OR sms_status = 'completed') 
-        AND (occurrence IS NULL 
-             OR occurrence LIKE '%DESLIGOU%' 
-             OR occurrence LIKE '%MUDA%' 
-             OR occurrence LIKE '%PROMESSA BOLETO%' 
-             OR occurrence LIKE '%ABANDONO%'
-             OR occurrence LIKE '%TENTATIVA%')
-        AND occurrence NOT IN ('FALECIDO', 'CLIENTE DESCONHECIDO', 'ALEGA PAGAMENTO - SEM COMPROVANTE', 'NAO PAGARA - DESEMPREGADO', 'NÃO PAGARÁ - SOLICITOU O CANCELAMENTO', 'ROBO SOLICITA ATENDIMENTO HUMANO', 'NÃO PAGARÁ - PROBLEMA FINANCEIRO', 'RETORNO AGENDADO COM CLIENTE', 'PROMESSA PIX', 'PROMESSA CARTÃO')
+      SET occurrence = 'ATENDEU - SMS ENVIADO' 
+      WHERE (call_status = 'completed' OR sms_status = 'completed')
     `);
+
+    // 2. Quem foi pulado por envio nos últimos 3 dias -> SMS ENVIADO 3 DIAS
     run(`
       UPDATE leads 
-      SET occurrence = 'IGNORADO - CONTATADO RECENTEMENTE (QUARENTENA 3D)' 
-      WHERE (call_log LIKE '%Quarentena%' OR call_log LIKE '%Ignorado%')
-        AND (occurrence IS NULL OR occurrence = '' OR occurrence LIKE '%TENTATIVA%')
+      SET occurrence = 'SMS ENVIADO 3 DIAS' 
+      WHERE (call_log LIKE '%3 dias%' OR call_log LIKE '%Ignorado%' OR call_log LIKE '%Quarentena%' OR occurrence LIKE '%3 DIAS%' OR occurrence LIKE '%QUARENTENA%')
+        AND call_status != 'completed'
     `);
+
+    // 3. Demais não atendidas -> NÃO ATENDEU
     run(`
       UPDATE leads 
-      SET transcript = NULL,
-          occurrence = 'CONFIRMOU CONTATO - ENVIO SMS'
-      WHERE transcript LIKE '%# PERSONA%' AND occurrence = 'FALECIDO'
+      SET occurrence = 'NÃO ATENDEU' 
+      WHERE (occurrence IS NULL OR occurrence = '' OR occurrence LIKE '%TENTATIVA%' OR occurrence LIKE '%DESLIGOU%' OR occurrence LIKE '%MUDA%' OR occurrence LIKE '%FALECIDO%')
+        AND call_status != 'completed'
+        AND occurrence != 'SMS ENVIADO 3 DIAS'
     `);
+
+    // Limpar transcrições que vazaram prompt de persona
     run(`
       UPDATE leads 
       SET transcript = NULL
       WHERE transcript LIKE '%# PERSONA%'
     `);
+
     if (res && res.changes > 0) {
-      console.log(`[RECLASSIFY] ${res.changes} leads antigos foram atualizados para 'CONFIRMOU CONTATO - ENVIO SMS'.`);
+      console.log(`[RECLASSIFY] Leads atualizados para as 3 tabulações oficiais.`);
       const allCamps = all('SELECT id FROM campaigns');
       allCamps.forEach(c => updateCampaignStats(c.id));
     }
