@@ -196,23 +196,6 @@ app.get('/api/campaigns/:id/leads', async (req, res) => {
     const totalLeadsRow = get(countQuery, params);
     const totalLeads = totalLeadsRow ? totalLeadsRow.total : 0;
 
-    // Resgate instantâneo em tempo real de áudios e transcrições da API Vapi para os leads visíveis
-    const { fetchVapiCallDetails } = require('./services/vapi.js');
-    await Promise.all(leads.map(async (lead) => {
-      if (lead.call_id && (!lead.recording_url || !lead.transcript)) {
-        try {
-          const details = await fetchVapiCallDetails(lead.call_id);
-          if (details) {
-            if (details.recordingUrl) lead.recording_url = details.recordingUrl;
-            if (details.transcript) lead.transcript = details.transcript;
-            run(
-              'UPDATE leads SET recording_url = COALESCE(?, recording_url), transcript = COALESCE(?, transcript) WHERE id = ?',
-              [details.recordingUrl, details.transcript, lead.id]
-            );
-          }
-        } catch (e) {}
-      }
-    }));
 
     res.json({
       leads,

@@ -109,6 +109,7 @@ function initDb() {
       email_status TEXT DEFAULT 'pending', -- 'pending', 'sending', 'completed', 'failed'
       email_log TEXT,
       transcript TEXT,
+      recording_url TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
@@ -136,9 +137,6 @@ function initDb() {
     db.exec('UPDATE leads SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL;');
     db.exec('UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
     db.exec('UPDATE campaigns SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL;');
-    db.exec("UPDATE leads SET occurrence = 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE' WHERE (occurrence = 'PROMESSA BOLETO' OR occurrence = 'PROMESSA PIX') AND (transcript IS NULL OR transcript = '');");
-    db.exec("UPDATE leads SET call_status = 'failed' WHERE (call_log LIKE '%customer-did-not-answer%' OR call_log LIKE '%customer-busy%' OR call_log LIKE '%no-answer%' OR call_log LIKE '%busy%' OR call_log LIKE '%failed-to-connect%') AND (transcript IS NULL OR transcript = '');");
-    db.exec("UPDATE campaigns SET concurrency_limit = 14 WHERE status IN ('processing', 'paused') AND (concurrency_limit IS NULL OR concurrency_limit > 14);");
   } catch (e) {}
 }
 
