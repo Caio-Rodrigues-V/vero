@@ -540,7 +540,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-800 antialiased">
       {/* Top Navbar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+      <header className="bg-[#890038] border-b border-[#72002E] sticky top-0 z-40 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img 
@@ -551,8 +551,8 @@ export default function App() {
                 (e.target as HTMLImageElement).src = '/logo_vero.svg';
               }}
             />
-            <div className="h-5 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
-            <h1 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
+            <div className="h-5 w-[1px] bg-white/20 mx-1 hidden sm:block" />
+            <h1 className="text-base sm:text-lg font-semibold text-white tracking-tight">
               Painel de Controle - Recuperação de Dívidas
             </h1>
           </div>
@@ -560,13 +560,13 @@ export default function App() {
           <div className="flex items-center gap-4">
             <button 
               onClick={handleSync}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-white hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 rounded-lg transition"
             >
               <RefreshCw size={14} /> Sincronizar
             </button>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400">Status da API:</span>
-              <span className="flex items-center gap-1 font-semibold text-emerald-600">
+              <span className="text-white/70">Status da API:</span>
+              <span className="flex items-center gap-1 font-semibold text-emerald-300">
                 Conectado
               </span>
             </div>
