@@ -544,7 +544,16 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold bg-linear-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+            <img 
+              src="/logo_vero.png" 
+              alt="Logo Vero" 
+              className="h-7 w-auto object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/logo_vero.svg';
+              }}
+            />
+            <div className="h-5 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
+            <h1 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
               Painel de Controle - Recuperação de Dívidas
             </h1>
           </div>
