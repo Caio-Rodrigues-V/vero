@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  LayoutDashboard, 
-  Megaphone, 
   Users, 
-  FileSpreadsheet, 
   UploadCloud, 
   Play, 
   CheckCircle2, 
@@ -16,7 +13,9 @@ import {
   ChevronRight,
   MessageSquare,
   X,
-  Filter
+  Filter,
+  BarChart2,
+  Upload
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -362,14 +361,14 @@ export default function App() {
 
   // Auto-refresh contínuo do dashboard a cada 3 segundos preservando filtros e busca
   useEffect(() => {
-    fetchStats(selectedCampaignId, selectedDate);
+    fetchStats(selectedCampaignId);
     fetchCampaigns();
     fetchOccurrences(selectedCampaignId);
     fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
     fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
 
     const interval = setInterval(() => {
-      fetchStats(selectedCampaignId, selectedDate);
+      fetchStats(selectedCampaignId);
       fetchCampaigns();
       fetchOccurrences(selectedCampaignId);
       fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
@@ -379,9 +378,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour, selectedDate]);
 
-  const fetchStats = async (campaignId: number | 'all' = selectedCampaignId, dt: string = selectedDate) => {
+  const fetchStats = async (campaignId: number | 'all' = selectedCampaignId) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats?campaignId=${campaignId}&date=${dt}`);
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats?campaignId=${campaignId}`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -440,6 +439,27 @@ export default function App() {
     fetchHourlyStats(id, startHour, endHour, selectedDate);
   };
 
+  const handleDeleteCampaign = async (id: number) => {
+    if (!confirm('Deseja excluir esta campanha e todos os seus leads?')) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setSelectedCampaignId('all');
+        setLeads([]);
+        fetchCampaigns();
+        fetchStats();
+      }
+    } catch (err) {
+      console.error('Error deleting campaign:', err);
+    }
+  };
+
+  const formatBRL = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -465,27 +485,22 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/upload`, {
         method: 'POST',
-        body: formData,
+        body: formData
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao enviar planilha');
+      if (res.ok) {
+        setUploadSuccess(`Campanha "${data.name}" criada com ${data.total_leads} leads com sucesso!`);
+        setFile(null);
+        setCampaignName('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        fetchCampaigns();
+        fetchStats();
+      } else {
+        setUploadError(data.error || 'Erro ao processar planilha.');
       }
-
-      setUploadSuccess(data.message);
-      setCampaignName('');
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      
-      fetchCampaigns();
-      fetchStats();
-      if (data.campaignId) {
-        setSelectedCampaignId(data.campaignId);
-        fetchLeads(data.campaignId, 1);
-      }
-    } catch (err: any) {
-      setUploadError(err.message);
+    } catch (err) {
+      setUploadError('Falha ao conectar com o servidor.');
     } finally {
       setUploading(false);
     }
@@ -498,10 +513,6 @@ export default function App() {
       });
       if (res.ok) {
         fetchCampaigns();
-        fetchStats();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Erro ao iniciar campanha');
       }
     } catch (err) {
       console.error('Error starting campaign:', err);
@@ -509,7 +520,7 @@ export default function App() {
   };
 
   const handleCancelCampaign = async (id: number) => {
-    if (!confirm('Deseja realmente cancelar/pausar esta campanha?')) return;
+    if (!confirm('Deseja realmente cancelar esta campanha? Os disparos restantes serão interrompidos.')) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/cancel`, {
         method: 'POST'
@@ -522,116 +533,64 @@ export default function App() {
     }
   };
 
-  const handleDeleteCampaign = async (id: number) => {
-    if (!confirm('Deseja excluir esta campanha e todos os seus leads?')) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        setSelectedCampaignId('all');
-        setLeads([]);
-        fetchCampaigns();
-        fetchStats();
-      }
-    } catch (err) {
-      console.error('Error deleting campaign:', err);
-    }
-  };
-
-  const formatBRL = (val: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  };
-
-  // Filtrar leads na memória para pesquisa rápida por nome/telefone
   const filteredLeads = leads.filter(l => 
     l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     l.phone.includes(searchTerm)
   );
 
-
-
   return (
-    <div className="flex min-h-screen bg-vero-bg">
-      {/* Sidebar Lateral */}
-      <aside className="w-64 bg-vero-darker text-white flex flex-col justify-between shrink-0">
-        <div>
-          {/* Logo Vero */}
-          <div className="p-6 border-b border-slate-800 flex flex-col items-start gap-1">
-            <img 
-              src="/logo_vero.svg" 
-              alt="Logo Vero" 
-              className="h-6 w-auto object-contain"
-            />
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">
-              Debt Recovery
-            </span>
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-800 antialiased">
+      {/* Top Navbar */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold bg-linear-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+              Painel de Controle - Recuperação de Dívidas
+            </h1>
           </div>
 
-          {/* Menus */}
-          <nav className="p-4 space-y-1">
-            <button 
-              onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
-                activeTab === 'dashboard' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <LayoutDashboard size={18} />
-              Painel de Controle
-            </button>
-            <button 
-              onClick={() => setActiveTab('campaigns')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
-                activeTab === 'campaigns' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Megaphone size={18} />
-              Campanhas
-            </button>
-            <button 
-              onClick={() => setActiveTab('leads')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
-                activeTab === 'leads' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <Users size={18} />
-              Visualizador de Leads
-            </button>
-            <button 
-              onClick={() => setActiveTab('reports')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
-                activeTab === 'reports' ? 'bg-vero-magenta text-white' : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <FileSpreadsheet size={18} />
-              Relatórios
-            </button>
-          </nav>
-        </div>
-
-      </aside>
-
-      {/* Conteúdo Principal */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Top Header */}
-        <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shrink-0">
-          <h2 className="text-xl font-bold text-slate-800">
-            {activeTab === 'dashboard' && 'Painel de Controle - Recuperação de Dívidas'}
-            {activeTab === 'campaigns' && 'Gerenciamento de Campanhas'}
-            {activeTab === 'leads' && 'Leads Importados'}
-            {activeTab === 'reports' && 'Exportação de Relatórios'}
-          </h2>
           <div className="flex items-center gap-4">
             <button 
               onClick={handleSync}
-              className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
             >
-              <RefreshCw size={14} />
-              Sincronizar
+              <RefreshCw size={14} /> Sincronizar
             </button>
-            <span className="text-xs text-slate-400">Status da API: <strong className="text-green-500">Conectado</strong></span>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Status da API:</span>
+              <span className="flex items-center gap-1 font-semibold text-emerald-600">
+                Conectado
+              </span>
+            </div>
           </div>
-        </header>
+        </div>
+      </header>
+
+      {/* Main Content Layout */}
+      <div className="flex-1 flex max-w-7xl w-full mx-auto">
+        {/* Sidebar Navigation */}
+        <aside className="w-64 border-r border-slate-200/80 bg-white/60 backdrop-blur-xs p-4 space-y-6 hidden md:block">
+          <div className="space-y-1">
+            <button 
+              onClick={() => setActiveTab('dashboard')}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <BarChart2 size={16} /> Dashboard
+            </button>
+            <button 
+              onClick={() => setActiveTab('campaigns')}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition ${activeTab === 'campaigns' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <Upload size={16} /> Campanhas / Upload
+            </button>
+            <button 
+              onClick={() => setActiveTab('leads')}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition ${activeTab === 'leads' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              <Users size={16} /> Visualizador de Leads
+            </button>
+          </div>
+        </aside>
 
         {/* Área de Visualização */}
         <div className="p-8 flex-1 space-y-8">
@@ -641,25 +600,26 @@ export default function App() {
             const isSpecificCampaign = selectedCampaignId !== 'all';
             const activeCampaign = isSpecificCampaign ? campaigns.find(c => c.id === selectedCampaignId) : null;
 
+            // Totais Consolidados (Soma das Campanhas para 100% de consistência)
             const totalLeadsBase = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.total_leads : 0)
-              : (stats.total_leads || campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0));
+              : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0);
 
             const totalDiscados = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.processed_leads : 0)
-              : (stats.total_processed || campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0));
+              : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0);
 
             const totalAtendidas = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.successful_calls : 0)
-              : (stats.total_successful_calls || campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0));
+              : (campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) || stats.total_successful_calls || 0);
 
             const totalNaoAtendidas = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.failed_calls : 0)
-              : (stats.total_failed_calls || campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0));
+              : (campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) || stats.total_failed_calls || 0);
 
             const totalSms = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.successful_sms : 0)
-              : (stats.total_successful_sms || campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0));
+              : (campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) || stats.total_successful_sms || 0);
 
             // Cálculo dos Spins (Giros da Base): Soma do progresso proporcional das campanhas
             const totalSpins = campaigns.reduce((acc, c) => {
@@ -673,28 +633,40 @@ export default function App() {
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
-            const totalQuarentena3Dias = (occurrences.find(o => o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA'))?.count) || (stats.total_quarantine_sms || 0);
+            const totalQuarentena3Dias = (occurrences.find(o => o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA'))?.count) || 0;
 
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const conversaoRate = totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0;
             const conversaoAloRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
 
-            const tabulationPieData = occurrences.length > 0 ? occurrences.map(o => {
-              const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
-              const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
-              const color = isAnswered ? '#10B981' : is3Days ? '#F59E0B' : '#F43F5E';
-              return {
-                name: o.occurrence,
-                value: o.count,
-                color: color
-              };
-            }) : [
-              { name: 'NÃO ATENDEU', value: 1, color: '#F43F5E' }
+            // Agrupamento estrito nas 3 Tabulações Oficiais da Vero
+            const groupedOccurrences = occurrences.reduce((acc, o) => {
+              const occ = (o.occurrence || '').toUpperCase();
+              const isAnswered = occ.startsWith('ATENDEU') || occ.includes('CONFIRMOU') || occ.includes('ENVIO SMS');
+              const is3Days = occ.includes('3 DIAS') || occ.includes('QUARENTENA');
+
+              if (isAnswered) {
+                acc.atendeu += o.count;
+              } else if (is3Days) {
+                acc.sms3dias += o.count;
+              } else {
+                acc.naoAtendeu += o.count;
+              }
+              return acc;
+            }, { atendeu: 0, naoAtendeu: 0, sms3dias: 0 });
+
+            const officialAtendeu = groupedOccurrences.atendeu || totalAtendidas;
+            const officialSMS3Dias = groupedOccurrences.sms3dias || totalQuarentena3Dias;
+            const officialNaoAtendeu = groupedOccurrences.naoAtendeu || Math.max(0, totalDiscados - officialAtendeu - officialSMS3Dias);
+
+            const tabulationPieData = [
+              { name: '🟢 ATENDEU - SMS ENVIADO', value: officialAtendeu, color: '#10B981' },
+              { name: '🔴 NÃO ATENDEU', value: officialNaoAtendeu, color: '#F43F5E' },
+              ...(officialSMS3Dias > 0 ? [{ name: '🟡 SMS ENVIADO 3 DIAS', value: officialSMS3Dias, color: '#F59E0B' }] : [])
             ];
 
             return (
               <div className="max-w-[1720px] mx-auto space-y-6">
-                
                 {/* 1. Header & Filtros Compactos Modernos */}
                 <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                   <div>
@@ -725,7 +697,7 @@ export default function App() {
                         onChange={(e) => {
                           const dt = e.target.value;
                           setSelectedDate(dt);
-                          fetchStats(selectedCampaignId, dt);
+                          fetchStats(selectedCampaignId);
                           fetchHourlyStats(selectedCampaignId, startHour, endHour, dt);
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
@@ -1746,7 +1718,7 @@ export default function App() {
           )}
 
         </div>
-      </main>
+      </div>
 
       {/* Modal de Transcrição */}
       {selectedTranscriptLead && (
