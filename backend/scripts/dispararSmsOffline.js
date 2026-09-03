@@ -57,7 +57,7 @@ async function readCsvFile(filePath, separator = ',') {
   });
 }
 
-async function runOfflineDispatch(planilhaPath = null, isDryRun = true) {
+async function runOfflineDispatch(planilhaPath = null, isDryRun = true, limit = null) {
   const planilhaFile = planilhaPath || DEFAULT_PLANILHA_DOWNLOADS;
 
   console.log(`================================================================================`);
@@ -134,9 +134,11 @@ async function runOfflineDispatch(planilhaPath = null, isDryRun = true) {
   let successCount = 0;
   let failCount = 0;
 
+  const listToProcess = limit ? matched.slice(0, limit) : matched;
+
   // 3. Execução dos disparos
-  for (let i = 0; i < matched.length; i++) {
-    const item = matched[i];
+  for (let i = 0; i < listToProcess.length; i++) {
+    const item = listToProcess[i];
     const messageText = buildDdmShortMessage(item.debtValue, item.correctBarcode);
 
     if (isDryRun) {
@@ -187,7 +189,9 @@ async function runOfflineDispatch(planilhaPath = null, isDryRun = true) {
 const args = process.argv.slice(2);
 const isReal = args.includes('--real');
 const fileArg = args.find(a => !a.startsWith('--'));
+const limitArgIdx = args.indexOf('--limit');
+const limitVal = limitArgIdx !== -1 && args[limitArgIdx + 1] ? parseInt(args[limitArgIdx + 1], 10) : null;
 
-runOfflineDispatch(fileArg || null, !isReal).catch(console.error);
+runOfflineDispatch(fileArg || null, !isReal, limitVal).catch(console.error);
 
 module.exports = { runOfflineDispatch };
