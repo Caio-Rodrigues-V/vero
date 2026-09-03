@@ -250,7 +250,8 @@ function formatOccurrenceLabel(occ, callLog) {
   if (callLog && callLog.includes('customer-did-not-answer')) return 'NÃO ATENDEU';
   if (!occ) return 'ATENDEU E DESLIGOU';
   const upper = occ.toUpperCase();
-  if (upper.includes('PROMESSA BOLETO')) return 'PROMESSA BOLETO';
+  if (upper.includes('CONFIRMOU CONTATO') || upper.includes('ENVIO SMS')) return 'CONFIRMOU CONTATO - ENVIO SMS';
+  if (upper.includes('PROMESSA BOLETO')) return 'CONFIRMOU CONTATO - ENVIO SMS';
   if (upper.includes('PROMESSA PIX')) return 'PROMESSA PIX';
   if (upper.includes('PROMESSA CART')) return 'PROMESSA CARTÃO';
   if (upper.includes('ALEGA PAGAMENTO')) return 'ALEGA PAGAMENTO';

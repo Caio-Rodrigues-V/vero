@@ -3,6 +3,7 @@
  * o envio automático de SMS / e-mail.
  */
 const validCpcOccurrences = [
+  'CONFIRMOU CONTATO - ENVIO SMS',
   'PROMESSA BOLETO',
   'PROMESSA PIX',
   'PROMESSA CARTÃO',
@@ -35,7 +36,7 @@ function extractCustomerSpeech(transcript) {
 
   for (const line of lines) {
     const lower = line.toLowerCase().trim();
-    if (lower.startsWith('vero:') || lower.startsWith('vêro:') || lower.startsWith('assistant:') || lower.startsWith('bot:')) {
+    if (lower.startsWith('vero:') || lower.startsWith('vêro:') || lower.startsWith('assistant:') || lower.startsWith('bot:') || lower.startsWith('ai:')) {
       continue;
     }
     if (lower.startsWith('user:') || lower.startsWith('customer:') || lower.startsWith('cliente:')) {
@@ -84,8 +85,9 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
   // Extrair apenas falas do cliente e normalizar sem acentos para comparações 100% precisas
   const customerSpeech = normalizeText(extractCustomerSpeech(transcript));
   const combinedText = customerSpeech;
+  const fullTranscriptNorm = normalizeText(transcript);
 
-  // 3. Classificações com base na fala do cliente (CPC)
+  // 3. Classificações com base na fala do cliente (Objeções / Especificidades)
   if (combinedText.includes('faleceu') || combinedText.includes('falecimento') || combinedText.includes('morreu') || combinedText.includes('obito')) {
     return 'FALECIDO';
   }
@@ -112,27 +114,6 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     return 'ALEGA PAGAMENTO - SEM COMPROVANTE';
   }
 
-  // PROMESSA DE PAGAMENTO: Requer menção explícita de pagamento/envio do boleto
-  const hasPromiseKeywords = 
-    combinedText.includes('promessa') || 
-    combinedText.includes('vou pagar') || 
-    combinedText.includes('pago amanha') || 
-    combinedText.includes('aceitou boleto') || 
-    combinedText.includes('envia o boleto') || 
-    combinedText.includes('envia o sms') || 
-    combinedText.includes('mandar o sms') || 
-    combinedText.includes('enviar o boleto') ||
-    combinedText.includes('pode mandar') ||
-    combinedText.includes('manda o boleto') ||
-    combinedText.includes('manda por sms') ||
-    combinedText.includes('vou quitar');
-
-  if (hasPromiseKeywords) {
-    if (combinedText.includes('pix')) return 'PROMESSA PIX';
-    if (combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
-    return 'PROMESSA BOLETO';
-  }
-
   if (combinedText.includes('desempregado') || combinedText.includes('desempregada') || combinedText.includes('sem emprego')) {
     return 'NAO PAGARA - DESEMPREGADO';
   }
@@ -155,7 +136,6 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     combinedText.includes('nao vai pagar') || 
     combinedText.includes('nao vou pagar') || 
     combinedText.includes('nao irei pagar') || 
-    combinedText.includes('financeiro') || 
     combinedText.includes('sem dinheiro') || 
     combinedText.includes('problema financeiro')
   ) {
@@ -171,12 +151,42 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration }) 
     return 'RETORNO AGENDADO COM CLIENTE';
   }
 
-  // 4. Quedas durante a chamada atendida sem promessa formalizada
+  // 4. Confirmação de CPC e Envio de SMS / Lembrete transmitido
+  const isAffirmativeCpc = /\b(sim|sou eu|correto|pode falar|eu mesma|eu mesmo|isso|confirmo|exato|esta|é ela|e ela|é ele|e ele|palestine|posso ajudar|fale|ok|ta bom|tá bom|entendido|certo|pode enviar|manda|bom dia|boa tarde|boa noite|alo|alô|ola|olá|fala|opa)\b/i.test(combinedText);
+
+  const hasPromiseKeywords = 
+    combinedText.includes('promessa') || 
+    combinedText.includes('vou pagar') || 
+    combinedText.includes('pago amanha') || 
+    combinedText.includes('aceitou boleto') || 
+    combinedText.includes('envia o boleto') || 
+    combinedText.includes('envia o sms') || 
+    combinedText.includes('mandar o sms') || 
+    combinedText.includes('enviar o boleto') ||
+    combinedText.includes('pode mandar') ||
+    combinedText.includes('manda o boleto') ||
+    combinedText.includes('manda por sms') ||
+    combinedText.includes('vou quitar');
+
+  const robotDeliveredMessage = 
+    fullTranscriptNorm.includes('sms') || 
+    fullTranscriptNorm.includes('fatura') || 
+    fullTranscriptNorm.includes('codigo de barras') || 
+    fullTranscriptNorm.includes('linha digitavel') ||
+    fullTranscriptNorm.includes('valor de');
+
+  if (isAffirmativeCpc || hasPromiseKeywords || (customerSpeech.length > 0 && robotDeliveredMessage)) {
+    if (combinedText.includes('pix')) return 'PROMESSA PIX';
+    if (combinedText.includes('cartao')) return 'PROMESSA CARTÃO';
+    return 'CONFIRMOU CONTATO - ENVIO SMS';
+  }
+
+  // 5. Quedas durante a chamada atendida sem confirmação
   if (dur >= 8 && (reason === 'customer-hung-up' || reason === 'assistant-hung-up')) {
     return 'LIGAÇÃO DESLIGOU / CAIU COM O CLIENTE';
   }
 
-  // Fallback geral se atendido
+  // Fallback geral se a ligação ficou muda ou desligou sem falar
   return 'TENTATIVA - LIGAÇÃO MUDA / DESLIGOU';
 }
 
