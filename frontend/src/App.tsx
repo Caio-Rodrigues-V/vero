@@ -17,8 +17,7 @@ import {
   Sparkles,
   MessageSquare,
   X,
-  Filter,
-  Zap
+  Filter
 } from 'lucide-react';
 
 // Interfaces para os tipos de dados
@@ -381,61 +380,6 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error starting campaign:', err);
-    }
-  };
-
-  const handleRetryFailedCampaign = async (id: number) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/retry-failed`, {
-        method: 'POST'
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.message || 'Leads reenfileirados para discagem com sucesso!');
-        fetchCampaigns();
-        fetchStats();
-        if (selectedCampaignId) fetchLeads(selectedCampaignId, 1);
-      }
-    } catch (err) {
-      console.error('Error retrying campaign:', err);
-    }
-  };
-
-  const handleResyncVapi = async (id: number) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/resync-vapi`, {
-        method: 'POST'
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.message || 'Ressincronização com Vapi concluída com sucesso!');
-        fetchCampaigns();
-        fetchStats();
-        if (selectedCampaignId) fetchLeads(selectedCampaignId, leadsPage, statusFilter, searchTerm);
-      } else {
-        alert('A API da Vapi está processando chamadas no momento. Aguarde alguns segundos e tente novamente.');
-      }
-    } catch (err: any) {
-      alert('Servidor ocupado. Tente novamente em instantes.');
-    }
-  };
-
-  const handleForceUnlock = async (id: number) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/campaigns/${id}/force-unlock`, {
-        method: 'POST'
-      });
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.message || 'Campanha destravada com sucesso! Discagem retomada.');
-        fetchCampaigns();
-        fetchStats();
-        if (selectedCampaignId) fetchLeads(selectedCampaignId, leadsPage, statusFilter, searchTerm);
-      } else {
-        handleRetryFailedCampaign(id);
-      }
-    } catch (err: any) {
-      alert(`Falha na conexão: ${err.message}`);
     }
   };
 
@@ -822,26 +766,19 @@ export default function App() {
                             {c.status === 'processing' ? (
                               <button 
                                 onClick={() => handleCancelCampaign(c.id)}
-                                className="flex-1 py-2 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-100 transition flex items-center justify-center gap-1 font-bold"
+                                className="w-full py-2 border border-amber-300 text-amber-700 bg-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-100 transition flex items-center justify-center gap-1 font-bold"
                               >
-                                ⏸️ Pausar
+                                ⏸️ Pausar Campanha
                               </button>
                             ) : (
                               <button 
                                 onClick={() => handleStartCampaign(c.id)}
-                                className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition flex items-center justify-center gap-1 font-bold"
+                                className="w-full py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition flex items-center justify-center gap-1 font-bold"
                               >
                                 <Play size={14} />
-                                {c.status === 'pending' ? 'Disparar' : 'Continuar'}
+                                {c.status === 'pending' ? 'Disparar Campanha' : 'Continuar Discagem'}
                               </button>
                             )}
-                            <button 
-                              onClick={() => handleForceUnlock(c.id)}
-                              className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-1 shadow-sm font-bold"
-                            >
-                              <Zap size={14} />
-                              Destravar
-                            </button>
                           </div>
                         </div>
                       );
@@ -1166,30 +1103,15 @@ export default function App() {
                             {c.status === 'processing' && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleCancelCampaign(c.id); }}
-                                className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-md text-xs font-semibold hover:bg-amber-100 transition"
+                                className="px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 rounded-md text-xs font-semibold hover:bg-amber-100 transition flex items-center gap-1 font-bold"
                               >
-                                Pausar
+                                ⏸️ Pausar
                               </button>
                             )}
                             <button 
-                              onClick={(e) => { e.stopPropagation(); handleForceUnlock(c.id); }}
-                              className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 transition flex items-center gap-1 shadow-sm"
-                              title="Destravar e retomar discagem de todos os leads não atendidos da lista"
-                            >
-                              <Zap size={12} />
-                              Destravar
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleResyncVapi(c.id); }}
-                              className="px-2 py-1.5 border border-purple-200 text-purple-700 bg-purple-50 rounded-md text-xs font-semibold hover:bg-purple-100 transition flex items-center gap-1"
-                              title="Sincronizar chamadas com a API Vapi em tempo real"
-                            >
-                              <RefreshCw size={12} />
-                              Sincronizar Vapi
-                            </button>
-                            <button 
                               onClick={(e) => { e.stopPropagation(); handleDeleteCampaign(c.id); }}
                               className="p-1.5 text-slate-400 hover:text-red-500 transition hover:bg-red-50 rounded"
+                              title="Excluir campanha"
                             >
                               <Trash2 size={16} />
                             </button>
