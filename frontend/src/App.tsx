@@ -902,13 +902,24 @@ export default function App() {
                     {occurrences.map(o => {
                       const totalCount = occurrences.reduce((acc, curr) => acc + curr.count, 0);
                       const pct = totalCount > 0 ? Math.round((o.count / totalCount) * 100) : 0;
+                      const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
+                      const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
+
+                      const textColor = isAnswered ? 'text-emerald-700' : is3Days ? 'text-amber-700' : 'text-slate-700';
+                      const badgeBg = isAnswered 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : is3Days 
+                        ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                        : 'bg-slate-100 text-slate-700 border-slate-200';
+                      const barColor = isAnswered ? 'bg-emerald-500' : is3Days ? 'bg-amber-500' : 'bg-slate-400';
+
                       return (
                         <div key={o.occurrence} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex flex-col justify-between">
                           <div className="flex items-start justify-between gap-2">
-                            <span className="text-xs font-bold text-vero-magenta leading-tight line-clamp-2" title={o.occurrence}>
+                            <span className={`text-xs font-bold leading-tight line-clamp-2 ${textColor}`} title={o.occurrence}>
                               {o.occurrence}
                             </span>
-                            <span className="bg-rose-50 text-vero-magenta border border-rose-100 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                            <span className={`border text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${badgeBg}`}>
                               {o.count}
                             </span>
                           </div>
@@ -919,7 +930,7 @@ export default function App() {
                             </div>
                             <div className="w-full bg-slate-200 rounded-full h-1.5">
                               <div
-                                className="bg-vero-magenta h-1.5 rounded-full"
+                                className={`h-1.5 rounded-full ${barColor}`}
                                 style={{ width: `${pct}%` }}
                               ></div>
                             </div>
