@@ -223,7 +223,6 @@ export default function App() {
   const [selectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
-  const [activeTableTab, setActiveTableTab] = useState<'leads' | 'resultadoHora' | 'tabulacoesHora'>('leads');
 
   // Dialer Provider (VAPI vs Retell AI)
   const [dialerProvider, setDialerProvider] = useState<'vapi' | 'retell'>('vapi');
@@ -926,41 +925,13 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 5. Seção de Tabelas Analíticas e Gestão */}
+                {/* 5. Seção de Tabulações por Hora */}
                 <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-                  {/* Header da Tabela com Abas */}
+                  {/* Header da Tabela */}
                   <div className="border-b border-slate-200/80 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => setActiveTableTab('leads')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          activeTableTab === 'leads' 
-                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200' 
-                            : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                      >
-                        Visualizador de Leads ({leadsTotalCount.toLocaleString('pt-BR')})
-                      </button>
-                      <button 
-                        onClick={() => setActiveTableTab('resultadoHora')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          activeTableTab === 'resultadoHora' 
-                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200' 
-                            : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                      >
-                        Matriz de Resultado por Hora
-                      </button>
-                      <button 
-                        onClick={() => setActiveTableTab('tabulacoesHora')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          activeTableTab === 'tabulacoesHora' 
-                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200' 
-                            : 'text-slate-500 hover:text-slate-900'
-                        }`}
-                      >
-                        Tabulações por Hora
-                      </button>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Tabulações por Hora</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Distribuição horária das 3 ocorrências oficiais da operação</p>
                     </div>
 
                     {activeCampaign && (
@@ -992,235 +963,42 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Sub-Aba 1: Visualizador de Leads */}
-                  {activeTableTab === 'leads' && (
-                    <div className="p-6 space-y-4">
-                      {/* Barra de Filtros da Tabela */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div className="relative flex-1 max-w-md">
-                          <Search className="absolute left-3 top-2.5 text-slate-400" size={15} />
-                          <input 
-                            type="text" 
-                            placeholder="Buscar por nome, telefone ou CPF..."
-                            value={searchTerm}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setSearchTerm(val);
-                              setLeadsPage(1);
-                              fetchLeads(selectedCampaignId, 1, statusFilter, val);
-                            }}
-                            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:border-slate-400"
-                          />
-                        </div>
+                  {/* Tabela de Tabulações por Hora */}
+                  <div className="p-6">
+                    <div className="overflow-x-auto border border-slate-200/80 rounded-xl">
+                      <table className="w-full text-left text-xs text-slate-600">
+                        <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80 text-[11px]">
+                          <tr>
+                            <th className="py-3 px-4">Tabulação / Ocorrência</th>
+                            {hourlyData.map(h => (
+                              <th key={h.hour} className="py-3 px-2.5 text-center">{h.hour}</th>
+                            ))}
+                            <th className="py-3 px-4 text-right">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 tabular-nums">
+                          {occurrences.map(o => {
+                            const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
+                            const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
+                            const colorClass = isAnswered ? 'text-emerald-700 font-semibold' : is3Days ? 'text-amber-700' : 'text-rose-700';
 
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500">Filtrar Status:</span>
-                          <select 
-                            value={statusFilter}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setStatusFilter(val);
-                              setLeadsPage(1);
-                              fetchLeads(selectedCampaignId, 1, val, searchTerm);
-                            }}
-                            className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none focus:border-slate-400"
-                          >
-                            <option value="all">Todas as Ligações</option>
-                            <option value="answered">🟢 Somente Ligações Atendidas</option>
-                            <option value="failed">🔴 Somente Não Atendidas</option>
-                            <option value="quarantine">🟡 Somente SMS ENVIADO 3 DIAS</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Tabela de Leads */}
-                      <div className="overflow-x-auto border border-slate-200/80 rounded-xl">
-                        <table className="w-full text-left text-xs text-slate-600">
-                          <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80 uppercase tracking-wider text-[11px]">
-                            <tr>
-                              <th className="py-3 px-4">Nome do Cliente</th>
-                              <th className="py-3 px-4">Telefone</th>
-                              <th className="py-3 px-4 text-right">Valor Dívida</th>
-                              <th className="py-3 px-4 text-center">Vencimento</th>
-                              <th className="py-3 px-4">Ocorrência</th>
-                              <th className="py-3 px-4">Status SMS</th>
-                              <th className="py-3 px-4">Log do SMS</th>
-                              <th className="py-3 px-4 text-center">Ações</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {filteredLeads.length > 0 ? (
-                              filteredLeads.map(l => {
-                                const isAnswered = l.occurrence?.includes('ATENDEU') || l.occurrence?.includes('CONFIRMOU') || l.occurrence?.includes('ENVIO SMS');
-                                const is3Days = l.occurrence?.includes('3 DIAS') || l.occurrence?.includes('QUARENTENA');
-
-                                const badgeColor = isAnswered 
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                  : is3Days 
-                                  ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                                  : 'bg-rose-50 text-rose-700 border-rose-200';
-
-                                return (
-                                  <tr key={l.id} className="hover:bg-slate-50/70 transition-colors">
-                                    <td className="py-3 px-4 font-medium text-slate-900">{l.name}</td>
-                                    <td className="py-3 px-4 tabular-nums text-slate-600 font-mono text-[11px]">{l.phone}</td>
-                                    <td className="py-3 px-4 text-right font-semibold text-slate-900 tabular-nums">{formatBRL(l.debt_value)}</td>
-                                    <td className="py-3 px-4 text-center tabular-nums text-slate-500">{l.due_date}</td>
-                                    <td className="py-3 px-4">
-                                      <span className={`px-2 py-0.5 rounded-md border text-[10px] font-semibold inline-block ${badgeColor}`}>
-                                        {l.occurrence || (l.call_status === 'completed' ? 'ATENDEU - SMS ENVIADO' : 'NÃO ATENDEU')}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4">
-                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                        l.sms_status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                                      }`}>
-                                        {l.sms_status === 'completed' ? 'Enviado' : 'Pendente'}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-4 max-w-[180px] truncate text-slate-400" title={l.sms_log}>
-                                      {l.sms_log || '-'}
-                                    </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <button 
-                                        onClick={() => handleOpenTranscriptModal(l)}
-                                        className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
-                                        title="Ver transcrição e áudio"
-                                      >
-                                        <MessageSquare size={13} />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            ) : (
-                              <tr>
-                                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
-                                  Nenhum lead encontrado com os filtros selecionados.
-                                </td>
+                            return (
+                              <tr key={o.occurrence} className="hover:bg-slate-50/70 transition-colors">
+                                <td className={`py-2.5 px-4 font-medium ${colorClass}`}>{o.occurrence}</td>
+                                {hourlyData.map(h => {
+                                  const val = isAnswered ? h.atendeu : is3Days ? h.quarentena3Dias : h.naoAtendeu;
+                                  return (
+                                    <td key={h.hour} className="py-2.5 px-2.5 text-center text-slate-600">{val || 0}</td>
+                                  );
+                                })}
+                                <td className="py-2.5 px-4 text-right font-bold text-slate-900">{o.count.toLocaleString('pt-BR')}</td>
                               </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Paginação */}
-                      <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
-                        <span>Página {leadsPage} de {leadsTotalPages || 1}</span>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => {
-                              const p = Math.max(1, leadsPage - 1);
-                              setLeadsPage(p);
-                              fetchLeads(selectedCampaignId, p, statusFilter, searchTerm);
-                            }}
-                            disabled={leadsPage <= 1}
-                            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs disabled:opacity-40 hover:bg-slate-50"
-                          >
-                            Anterior
-                          </button>
-                          <button 
-                            onClick={() => {
-                              const p = Math.min(leadsTotalPages, leadsPage + 1);
-                              setLeadsPage(p);
-                              fetchLeads(selectedCampaignId, p, statusFilter, searchTerm);
-                            }}
-                            disabled={leadsPage >= leadsTotalPages}
-                            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs disabled:opacity-40 hover:bg-slate-50"
-                          >
-                            Próxima
-                          </button>
-                        </div>
-                      </div>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-
-                  {/* Sub-Aba 2: Matriz de Resultado por Hora */}
-                  {activeTableTab === 'resultadoHora' && (
-                    <div className="p-6">
-                      <div className="overflow-x-auto border border-slate-200/80 rounded-xl">
-                        <table className="w-full text-left text-xs text-slate-600">
-                          <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80 text-[11px]">
-                            <tr>
-                              <th className="py-3 px-4">Hora</th>
-                              <th className="py-3 px-4 text-right">Discado</th>
-                              <th className="py-3 px-4 text-right">AD/PA (Alô)</th>
-                              <th className="py-3 px-4 text-right">CPC</th>
-                              <th className="py-3 px-4 text-right">CPCA (SMS)</th>
-                              <th className="py-3 px-4 text-right">Acordos</th>
-                              <th className="py-3 px-4 text-right">Hit Rate %</th>
-                              <th className="py-3 px-4 text-right">Conversão %</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 tabular-nums">
-                            {hourlyData.length > 0 ? (
-                              hourlyData.map(h => {
-                                const hHitRate = h.total > 0 ? (h.atendeu / h.total) * 100 : 0;
-                                const hConvRate = h.atendeu > 0 ? (h.atendeu / h.atendeu) * 100 : 0;
-                                return (
-                                  <tr key={h.hour} className="hover:bg-slate-50/70 transition-colors">
-                                    <td className="py-2.5 px-4 font-medium text-slate-900">{h.hour}</td>
-                                    <td className="py-2.5 px-4 text-right font-semibold text-slate-900">{h.total.toLocaleString('pt-BR')}</td>
-                                    <td className="py-2.5 px-4 text-right text-emerald-600 font-medium">{h.atendeu.toLocaleString('pt-BR')}</td>
-                                    <td className="py-2.5 px-4 text-right text-sky-600 font-medium">{h.atendeu.toLocaleString('pt-BR')}</td>
-                                    <td className="py-2.5 px-4 text-right text-indigo-600 font-medium">{h.atendeu.toLocaleString('pt-BR')}</td>
-                                    <td className="py-2.5 px-4 text-right text-slate-900 font-medium">{h.atendeu.toLocaleString('pt-BR')}</td>
-                                    <td className="py-2.5 px-4 text-right font-medium">{hHitRate.toFixed(2).replace('.', ',')}%</td>
-                                    <td className="py-2.5 px-4 text-right font-medium text-emerald-600">{hConvRate.toFixed(2).replace('.', ',')}%</td>
-                                  </tr>
-                                );
-                              })
-                            ) : (
-                              <tr>
-                                <td colSpan={8} className="py-6 text-center text-slate-400 text-xs">
-                                  Nenhum dado horário disponível para o filtro atual.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sub-Aba 3: Tabulações por Hora */}
-                  {activeTableTab === 'tabulacoesHora' && (
-                    <div className="p-6">
-                      <div className="overflow-x-auto border border-slate-200/80 rounded-xl">
-                        <table className="w-full text-left text-xs text-slate-600">
-                          <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80 text-[11px]">
-                            <tr>
-                              <th className="py-3 px-4">Tabulação / Ocorrência</th>
-                              {hourlyData.map(h => (
-                                <th key={h.hour} className="py-3 px-2.5 text-center">{h.hour}</th>
-                              ))}
-                              <th className="py-3 px-4 text-right">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 tabular-nums">
-                            {occurrences.map(o => {
-                              const isAnswered = o.occurrence?.includes('ATENDEU') || o.occurrence?.includes('CONFIRMOU') || o.occurrence?.includes('ENVIO SMS');
-                              const is3Days = o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA');
-                              const colorClass = isAnswered ? 'text-emerald-700 font-semibold' : is3Days ? 'text-amber-700' : 'text-rose-700';
-
-                              return (
-                                <tr key={o.occurrence} className="hover:bg-slate-50/70 transition-colors">
-                                  <td className={`py-2.5 px-4 font-medium ${colorClass}`}>{o.occurrence}</td>
-                                  {hourlyData.map(h => {
-                                    const val = isAnswered ? h.atendeu : is3Days ? h.quarentena3Dias : h.naoAtendeu;
-                                    return (
-                                      <td key={h.hour} className="py-2.5 px-2.5 text-center text-slate-600">{val || 0}</td>
-                                    );
-                                  })}
-                                  <td className="py-2.5 px-4 text-right font-bold text-slate-900">{o.count.toLocaleString('pt-BR')}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
 
               </div>
