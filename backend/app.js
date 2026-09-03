@@ -1555,6 +1555,31 @@ app.get('*', (req, res, next) => {
 });
 
 /**
+ * Rota para envio de SMS de teste direto pelo servidor
+ */
+app.post('/api/leads/send-test-sms', async (req, res) => {
+  try {
+    const { phone, value, barcode } = req.body || {};
+    const targetPhone = phone || '21981811077';
+    const debtValue = value || 81.73;
+    const debtBarcode = barcode || '34191090166648265854015103950000115320000008440';
+    
+    const { triggerDdmShortSms } = require('./services/communication.js');
+    const result = await triggerDdmShortSms({
+      id: 999999,
+      name: 'Faraó Teste',
+      phone: targetPhone,
+      debt_value: debtValue,
+      barcode: debtBarcode
+    });
+    
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * Rota para reclassificar todas as ocorrências legadas no banco em 3 tabulações simples
  */
 app.post('/api/leads/reclassify-occurrences', (req, res) => {
