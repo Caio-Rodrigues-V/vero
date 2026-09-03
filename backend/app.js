@@ -1157,6 +1157,8 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     res.json({
       success: true,
       campaignId,
+      name: campaignName.trim(),
+      total_leads: leads.length,
       totalLeads: leads.length,
       message: `Campanha criada com sucesso! Discagem iniciada automaticamente.`
     });

@@ -489,7 +489,9 @@ export default function App() {
 
       const data = await res.json();
       if (res.ok) {
-        setUploadSuccess(`Campanha "${data.name}" criada com ${data.total_leads} leads com sucesso!`);
+        const createdName = data.name || campaignName || 'Nova Campanha';
+        const createdTotal = data.total_leads ?? data.totalLeads ?? 1;
+        setUploadSuccess(`Campanha "${createdName}" criada com ${createdTotal} leads com sucesso!`);
         setFile(null);
         setCampaignName('');
         if (fileInputRef.current) fileInputRef.current.value = '';
