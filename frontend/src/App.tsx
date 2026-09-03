@@ -1284,9 +1284,7 @@ export default function App() {
                       <th className="py-3 px-4">Valor</th>
                       <th className="py-3 px-4">Vencimento</th>
                       <th className="py-3 px-4">Ocorrência (Tabulação)</th>
-                      <th className="py-3 px-4">Status VAPI (Ligação)</th>
                       <th className="py-3 px-4">Transcrição</th>
-                      <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status SMS</th>
                       <th className="py-3 px-4">Log do SMS</th>
                     </tr>
@@ -1310,27 +1308,6 @@ export default function App() {
                               {l.occurrence || 'NÃO ATENDEU'}
                             </span>
                           </td>
-                          
-                          {/* Status Ligação */}
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
-                              l.call_status === 'completed' && 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            } ${
-                              l.call_status === 'processing' && 'bg-amber-50 text-amber-700 border border-amber-200'
-                            } ${
-                              l.call_status === 'calling' && 'bg-sky-50 text-sky-700 animate-pulse border border-sky-200'
-                            } ${
-                              l.call_status === 'failed' && 'bg-rose-50 text-rose-700 border border-rose-200'
-                            } ${
-                              l.call_status === 'pending' && 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {l.call_status === 'completed' && 'Atendida'}
-                              {l.call_status === 'processing' && 'Fila n8n'}
-                              {l.call_status === 'calling' && 'Discando...'}
-                              {l.call_status === 'failed' && 'Não Atendida'}
-                              {l.call_status === 'pending' && 'Aguardando'}
-                            </span>
-                          </td>
 
                           {/* Transcrição */}
                           <td className="py-3 px-4">
@@ -1345,10 +1322,6 @@ export default function App() {
                             ) : (
                               <span className="text-slate-300 text-[10px] italic">Sem texto</span>
                             )}
-                          </td>
-
-                          <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.call_log}>
-                            {l.call_log || 'Nenhum registro'}
                           </td>
 
                           {/* Status SMS */}
@@ -1378,7 +1351,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={10} className="py-8 text-center text-slate-400">
+                        <td colSpan={8} className="py-8 text-center text-slate-400">
                           Nenhum lead encontrado para esta busca/campanha.
                         </td>
                       </tr>
