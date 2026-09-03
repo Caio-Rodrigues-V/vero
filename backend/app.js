@@ -1201,6 +1201,27 @@ app.get('/api/sample-file', (req, res) => {
 });
 
 /**
+ * Remove números de teste da quarentena de 3 dias do banco
+ */
+app.all('/api/tools/clear-quarantine', (req, res) => {
+  const phone = req.query.phone || req.body?.phone || '981811077';
+  const clean = String(phone).replace(/\D/g, '');
+
+  const result = run(`
+    DELETE FROM leads 
+    WHERE phone LIKE ? OR phone LIKE '%981811077%' OR phone LIKE '%966491519%'
+  `, [`%${clean}%`]);
+
+  console.log(`[CLEAR QUARENTENA] Removidos ${result.changes} registros de teste do banco de dados.`);
+
+  res.json({
+    success: true,
+    message: `Telefones de teste removidos do histórico da quarentena com sucesso!`,
+    deletedRows: result.changes
+  });
+});
+
+/**
  * Endpoint de callback para o n8n atualizar o status do lead
  */
 app.post('/api/leads/update', (req, res) => {
