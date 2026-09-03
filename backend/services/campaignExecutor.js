@@ -110,6 +110,7 @@ async function processCampaign(campaignId, force = false) {
           run(
             `UPDATE leads 
              SET call_status = 'failed', 
+                 occurrence = 'IGNORADO - CONTATADO RECENTEMENTE (QUARENTENA 3D)',
                  call_log = 'Ignorado: Cliente contatado com sucesso nos últimos 3 dias (Quarentena 3d)',
                  sms_status = 'failed',
                  sms_log = 'Ignorado: Quarentena de 3d ativa.',
