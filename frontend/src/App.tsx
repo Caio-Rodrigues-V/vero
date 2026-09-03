@@ -220,7 +220,7 @@ export default function App() {
   
   // BI e Métricas por Horário
   const [hourlyData, setHourlyData] = useState<{ hour: string; atendeu: number; naoAtendeu: number; quarentena3Dias: number; total: number }[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
   const [activeTableTab, setActiveTableTab] = useState<'leads' | 'resultadoHora' | 'tabulacoesHora'>('leads');
@@ -688,22 +688,6 @@ export default function App() {
 
                   {/* Barra de Filtros Compacta */}
                   <div className="flex flex-wrap items-center gap-3">
-                    {/* Filtro Data */}
-                    <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
-                      <span className="text-xs font-medium text-slate-500">Data:</span>
-                      <input 
-                        type="date" 
-                        value={selectedDate}
-                        onChange={(e) => {
-                          const dt = e.target.value;
-                          setSelectedDate(dt);
-                          fetchStats(selectedCampaignId);
-                          fetchHourlyStats(selectedCampaignId, startHour, endHour, dt);
-                        }}
-                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
-                      />
-                    </div>
-
                     {/* Campanhas e Filas */}
                     <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
                       <span className="text-xs font-medium text-slate-500">Campanha:</span>
