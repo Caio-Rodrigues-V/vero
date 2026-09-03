@@ -1281,7 +1281,6 @@ export default function App() {
                     <tr className="border-b border-slate-100 text-slate-400 font-semibold">
                       <th className="py-3 px-4">Nome do Cliente</th>
                       <th className="py-3 px-4">Telefone</th>
-                      <th className="py-3 px-4">E-mail</th>
                       <th className="py-3 px-4">Valor</th>
                       <th className="py-3 px-4">Vencimento</th>
                       <th className="py-3 px-4">Ocorrência (Tabulação)</th>
@@ -1290,8 +1289,6 @@ export default function App() {
                       <th className="py-3 px-4">Log de Voz VAPI</th>
                       <th className="py-3 px-4">Status SMS</th>
                       <th className="py-3 px-4">Log do SMS</th>
-                      <th className="py-3 px-4">Status E-mail</th>
-                      <th className="py-3 px-4">Log de E-mail</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
@@ -1300,7 +1297,6 @@ export default function App() {
                         <tr key={l.id} className="hover:bg-slate-50 transition-colors">
                           <td className="py-3 px-4 font-semibold text-slate-700">{l.name}</td>
                           <td className="py-3 px-4">{l.phone}</td>
-                          <td className="py-3 px-4 truncate max-w-[150px] text-slate-400" title={l.email}>{l.email || 'Nenhum'}</td>
                           <td className="py-3 px-4 font-bold text-slate-700">{formatBRL(l.debt_value)}</td>
                           <td className="py-3 px-4">{l.due_date}</td>
                           <td className="py-3 px-4">
@@ -1378,35 +1374,11 @@ export default function App() {
                           <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.sms_log}>
                             {l.sms_log || 'Nenhum registro'}
                           </td>
-
-                          {/* Status E-mail */}
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded font-bold ${
-                              l.email_status === 'completed' && 'bg-green-50 text-green-700'
-                            } ${
-                              l.email_status === 'processing' && 'bg-amber-50 text-amber-700'
-                            } ${
-                              l.email_status === 'sending' && 'bg-sky-50 text-sky-700 animate-pulse'
-                            } ${
-                              l.email_status === 'failed' && 'bg-slate-100 text-slate-600'
-                            } ${
-                              l.email_status === 'pending' && 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {l.email_status === 'completed' && 'Enviado'}
-                              {l.email_status === 'processing' && 'Fila n8n'}
-                              {l.email_status === 'sending' && 'Enviando...'}
-                              {l.email_status === 'failed' && 'Não Enviado'}
-                              {l.email_status === 'pending' && 'Aguardando'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 max-w-[200px] truncate text-[10px] text-slate-400" title={l.email_log}>
-                            {l.email_log || 'Nenhum registro'}
-                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={13} className="py-8 text-center text-slate-400">
+                        <td colSpan={10} className="py-8 text-center text-slate-400">
                           Nenhum lead encontrado para esta busca/campanha.
                         </td>
                       </tr>
@@ -1486,7 +1458,7 @@ export default function App() {
                       <a 
                         href={`${BACKEND_URL}/api/campaigns/${c.id}/export?filter=answered`}
                         className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm"
-                        title="Baixar lista formatada para Excel com os leads efetivamente atendidos para envio no Gmail"
+                        title="Baixar lista formatada para Excel com os leads atendidos e linhas digitáveis"
                       >
                         <Download size={14} />
                         📥 Apenas Atendidas ({c.successful_calls})
