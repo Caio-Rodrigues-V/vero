@@ -381,6 +381,58 @@ function enqueueDdmSms(lead) {
   });
 }
 
+const https = require('https');
+const http = require('http');
+
+/**
+ * Cliente HTTP/HTTPS ultra-resiliente para a API da DDM com bypass de TLS e cabeçalhos de navegador
+ */
+function sendDdmHttpRequest(targetUrl) {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsed = new URL(targetUrl);
+      const isHttps = parsed.protocol === 'https:';
+      const lib = isHttps ? https : http;
+
+      const req = lib.request(
+        targetUrl,
+        {
+          method: 'GET',
+          rejectUnauthorized: false,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*'
+          },
+          timeout: 10000
+        },
+        (res) => {
+          let data = '';
+          res.on('data', chunk => { data += chunk; });
+          res.on('end', () => {
+            resolve({
+              ok: res.statusCode >= 200 && res.statusCode < 400,
+              status: res.statusCode,
+              text: () => Promise.resolve(data)
+            });
+          });
+        }
+      );
+
+      req.on('timeout', () => {
+        req.destroy(new Error('Timeout de 10s na conexão com API DDM'));
+      });
+
+      req.on('error', (err) => {
+        reject(err);
+      });
+
+      req.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
 /**
  * Disparo real de SMS com até 3 retentativas automáticas e backoff
  */
@@ -412,7 +464,16 @@ async function executeDdmShortSmsWithRetry(lead) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       console.log(`[DDM SMS] Enviando SMS para ${cleanedPhone} (Tentativa ${attempt}/3)...`);
-      const response = await fetch(url, { method: 'GET' });
+      
+      // Tentar com o cliente nativo resiliente
+      let response;
+      try {
+        response = await sendDdmHttpRequest(url);
+      } catch (nativeErr) {
+        // Fallback para fetch global
+        response = await fetch(url, { method: 'GET' });
+      }
+
       const responseText = await response.text();
 
       if (!response.ok) {
