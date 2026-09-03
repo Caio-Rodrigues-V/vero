@@ -25,7 +25,7 @@ async function processCampaign(campaignId, force = false) {
   try {
     while (activeJobs.has(campaignId)) {
       // 1. Verificar se a campanha ainda está 'processing'
-      const campaign = get('SELECT status, concurrency_limit, dialer_provider FROM campaigns WHERE id = ?', [campaignId]);
+      const campaign = get('SELECT id, name, status, concurrency_limit, dialer_provider FROM campaigns WHERE id = ?', [campaignId]);
       if (!campaign || campaign.status !== 'processing') {
         console.log(`[EXECUTOR] Campanha #${campaignId} foi pausada ou finalizada. Interrompendo robô.`);
         activeJobs.delete(campaignId);
@@ -92,10 +92,13 @@ async function processCampaign(campaignId, force = false) {
         break;
       }
 
+      const isTestCampaign = campaign && campaign.name && (campaign.name.toLowerCase().includes('teste') || campaign.name.toLowerCase().includes('test'));
+
       await Promise.all(leads.map(async (lead) => {
         // Trava de Quarentena de 3 Dias: Se este número recebeu SMS ou teve CPC nos últimos 3 dias, pula a discagem
+        // (Campanhas com nome 'teste' ou 'test' são isentas para permitir testes a qualquer momento)
         const cleanPhone = String(lead.phone).replace(/\D/g, '');
-        const recentContact = get(
+        const recentContact = !isTestCampaign && get(
           `SELECT id FROM leads 
            WHERE (phone = ? OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') = ?)
              AND id != ? 
