@@ -829,7 +829,6 @@ app.get('/api/vapi/assistants', async (req, res) => {
   const apiKey = process.env.VAPI_API_KEY;
 
   if (!apiKey) {
-    // Retorna opções de teste se não houver chave no .env
     return res.json([
       { id: 'vapi_residencia_cobrança', name: 'Vero Residencial - Cobrança Padrão' },
       { id: 'vapi_empresa_cobrança', name: 'Vero PME - Cobrança Empresas' }
@@ -854,7 +853,6 @@ app.get('/api/vapi/assistants', async (req, res) => {
       name: ast.name || `Assistente (${ast.id})`
     }));
 
-    // Se houver VAPI_ASSISTANT_ID definido no .env, exibe apenas ele no dropdown
     const configAssistantId = process.env.VAPI_ASSISTANT_ID;
     if (configAssistantId) {
       const found = mapped.find(ast => ast.id === configAssistantId);
@@ -882,8 +880,9 @@ app.get('/api/vapi/phone-numbers', async (req, res) => {
 
   if (!apiKey) {
     return res.json([
-      { id: '3fd74b77-c837-4c33-a6b2-20fd915c5a81', name: 'OKTOR SIP (+5521983137367)' },
-      { id: '992eb80b-c46a-4d61-9087-37ec21c22333', name: 'New Voice NV (+5521989510033)' }
+      { id: '3fd74b77-c837-4c33-a6b2-20fd915c5a81', name: 'OKTOR SIP NOVA 01-09 (+5521983137367)' },
+      { id: 'd367412a-d150-4a58-b99d-3c2b5f47a781', name: 'OKTOR - VAPI PROD (+5521987710175)' },
+      { id: '6daa8c7b-d447-47a0-8e50-06d9d30f11d6', name: 'teste vapi (+5521987710234)' }
     ]);
   }
 
@@ -909,43 +908,8 @@ app.get('/api/vapi/phone-numbers', async (req, res) => {
   } catch (error) {
     console.error('Erro ao buscar phone numbers VAPI:', error);
     res.json([
-      { id: '3fd74b77-c837-4c33-a6b2-20fd915c5a81', name: 'OKTOR SIP (+5521983137367)' },
-      { id: '992eb80b-c46a-4d61-9087-37ec21c22333', name: 'New Voice NV (+5521989510033)' },
-      { id: '8a2d13db-2d28-4cd6-a745-031af5fd5305', name: 'NV BINA LOC (+5521987710179)' },
-      { id: '7150a15e-7ada-4441-b10e-9dc475398405', name: 'OKTOR VERO (+5521984354821)' }
-    ]);
-  }
-});
-
-/**
- * Listar Agentes cadastrados na Retell AI
- */
-app.get('/api/retell/agents', async (req, res) => {
-  const apiKey = process.env.RETELL_API_KEY || 'key_a5dbdb38e3718d2aaa70862d1ad8';
-
-  try {
-    const response = await fetch('https://api.retellai.com/list-agents', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro Retell HTTP: ${response.status}`);
-    }
-
-    const agents = await response.json();
-    const mapped = agents.map(ast => ({
-      id: ast.agent_id,
-      name: `${ast.agent_name || 'Agente Retell'} (${ast.agent_id.slice(0, 10)})`
-    }));
-
-    res.json(mapped);
-  } catch (error) {
-    console.error('Erro ao buscar agentes Retell:', error);
-    res.json([
-      { id: 'agent_7bc0f8110f1a29b6f4c0151320', name: 'Julia Agent (agent_7bc0f8)' }
+      { id: '3fd74b77-c837-4c33-a6b2-20fd915c5a81', name: 'OKTOR SIP NOVA 01-09 (+5521983137367)' },
+      { id: 'd367412a-d150-4a58-b99d-3c2b5f47a781', name: 'OKTOR - VAPI PROD (+5521987710175)' }
     ]);
   }
 });

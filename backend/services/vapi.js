@@ -127,7 +127,7 @@ function daysToWords(days) {
 async function makeVapiCall(lead) {
   const apiKey = process.env.VAPI_API_KEY;
   const assistantId = process.env.VAPI_ASSISTANT_ID;
-  let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID || '992eb80b-c46a-4d61-9087-37ec21c22333'; // New Voice NV (Linha com Discagem Nacional Liberada)
+  let phoneNumberId = process.env.VAPI_PHONE_NUMBER_ID || '3fd74b77-c837-4c33-a6b2-20fd915c5a81'; // OKTOR SIP NOVA 01-09 (+5521983137367)
 
   // Buscar o assistente e a linha/tronco telefônico selecionados nesta campanha no banco
   let campaignAssistantId = null;
