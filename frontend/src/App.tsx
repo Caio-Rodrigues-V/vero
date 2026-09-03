@@ -645,6 +645,10 @@ export default function App() {
               ? campaigns.find(c => c.id === selectedCampaignId)
               : (campaigns.find(c => c.status === 'processing') || campaigns[0]);
 
+            const totalLeadsBase = (selectedCampaignId && selectedCampaignId !== 'all')
+              ? (activeCampaign ? activeCampaign.total_leads : 0)
+              : (stats.total_leads || 0);
+
             const totalDiscados = (selectedCampaignId && selectedCampaignId !== 'all')
               ? (activeCampaign ? activeCampaign.processed_leads : 0)
               : (stats.total_processed || 0);
@@ -674,7 +678,6 @@ export default function App() {
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
-            const localizacaoRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const conversaoRate = totalAtendidas > 0 ? (totalSms / totalAtendidas) * 100 : 0;
 
             const tabulationPieData = occurrences.length > 0 ? occurrences.map(o => {
@@ -798,47 +801,47 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. Grid de KPIs Modernos (5 Cards Enterprise SaaS incluindo Spins) */}
+                {/* 2. Grid de KPIs Reais da Operação (5 Cards Enterprise SaaS) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   <ModernKPICard 
-                    title="Hit Rate"
+                    title="1. Base de Leads"
+                    value={totalLeadsBase.toLocaleString('pt-BR')}
+                    subtitle="Total de leads carregados na plataforma"
+                    progress={100}
+                    colorTheme="slate"
+                    indicatorText="Base Total"
+                  />
+                  <ModernKPICard 
+                    title="2. Volume Discado"
+                    value={totalDiscados.toLocaleString('pt-BR')}
+                    subtitle="Volume total de tentativas na base"
+                    progress={totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100}
+                    colorTheme="cyan"
+                    indicatorText="Discagens"
+                  />
+                  <ModernKPICard 
+                    title="3. Taxa de Alô (Hit)"
                     value={`${hitRate.toFixed(2).replace('.', ',')}%`}
                     subtitle={`${totalAtendidas.toLocaleString('pt-BR')} conexões atendidas`}
                     progress={hitRate}
-                    colorTheme="cyan"
-                    indicatorText="Alô Conectado"
-                  />
-                  <ModernKPICard 
-                    title="Localização"
-                    value={`${localizacaoRate.toFixed(2).replace('.', ',')}%`}
-                    subtitle="Contato efetivo com a pessoa certa"
-                    progress={localizacaoRate}
                     colorTheme="indigo"
-                    indicatorText="CPC Efetivo"
+                    indicatorText="Alô / Atendeu"
                   />
                   <ModernKPICard 
-                    title="Conversão"
-                    value={`${conversaoRate.toFixed(2).replace('.', ',')}%`}
-                    subtitle={`${totalSms.toLocaleString('pt-BR')} SMS enviados com sucesso`}
+                    title="4. SMS Enviados"
+                    value={totalSms.toLocaleString('pt-BR')}
+                    subtitle={`${conversaoRate.toFixed(2).replace('.', ',')}% das ligações atendidas`}
                     progress={conversaoRate}
                     colorTheme="emerald"
-                    indicatorText="CPCA / Linha"
+                    indicatorText="Linha Digitável"
                   />
                   <ModernKPICard 
                     title="Spins (Giros da Base)"
                     value={`${formattedSpins} Giros`}
-                    subtitle={`${activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) 100% completo(s)` : 'Giro em andamento'}`}
+                    subtitle={`${activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) completo(s)` : 'Giro em andamento'}`}
                     progress={Math.min(100, (activeSpins % 1) * 100 || (activeSpins > 0 ? 100 : 0))}
                     colorTheme="cyan"
                     indicatorText="Giros Concluídos"
-                  />
-                  <ModernKPICard 
-                    title="Volume da Base"
-                    value={totalDiscados.toLocaleString('pt-BR')}
-                    subtitle="Total acumulado de discagens no período"
-                    progress={100}
-                    colorTheme="slate"
-                    indicatorText="100% Processado"
                   />
                 </div>
 
@@ -906,56 +909,44 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 4. Funil Operacional (Flow Diagram Corporativo / Sankey SaaS) */}
+                {/* 4. Funil Operacional Real (As 4 Etapas Oficiais da Vero) */}
                 <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">Funil Operacional de Recuperação</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">Fluxo de conversão: Discagem → Contato Efetivo → Entrega de Linha Digitável</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Fluxo das 4 etapas reais: Base de Leads → Discagens → Taxa de Alô → SMS Enviados</p>
                     </div>
-                    <span className="text-xs text-slate-400 font-medium">Fluxo Integrado</span>
+                    <span className="text-xs text-slate-400 font-medium">Métricas Reais</span>
                   </div>
 
-                  {/* Flow Diagram Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
-                    {/* Etapa 1 */}
+                  {/* Flow Diagram Grid - 4 Etapas Oficiais */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                    {/* Etapa 1: Base de Leads */}
                     <div className="flex flex-col gap-2.5">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">1. Esforço Total</span>
-                      <FlowNode title="Discados" count={totalDiscados || 35529} pct="100%" status="primary" />
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">1. Base de Leads</span>
+                      <FlowNode title="Total de Leads Carregados" count={totalLeadsBase} pct="100%" status="neutral" />
                     </div>
 
-                    {/* Etapa 2 */}
+                    {/* Etapa 2: Discagens */}
                     <div className="flex flex-col gap-2.5">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">2. Discagem</span>
-                      <FlowNode title="Atendidas" count={totalAtendidas || 11099} pct={`${hitRate > 0 ? hitRate.toFixed(1) : '30,1'}%`} status="success" />
-                      <FlowNode title="Não Atende" count={totalNaoAtendidas || 25830} pct={`${(100 - hitRate).toFixed(1)}%`} status="danger" />
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">2. Volume Discado</span>
+                      <FlowNode title="Tentativas Realizadas" count={totalDiscados} pct="100%" status="primary" />
                     </div>
 
-                    {/* Etapa 3 */}
+                    {/* Etapa 3: Taxa de Alô */}
                     <div className="flex flex-col gap-2.5">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">3. Triagem</span>
-                      <FlowNode title="AD/PA (Alô)" count={totalAtendidas || 1192} pct={`${hitRate > 0 ? hitRate.toFixed(1) : '10,7'}%`} status="primary" />
-                      <FlowNode title="Caixa Postal" count={Math.round(totalNaoAtendidas * 0.4) || 9907} pct="89,3%" status="neutral" />
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">3. Taxa de Alô (Hit)</span>
+                      <FlowNode title="🟢 Atendeu (Alô)" count={totalAtendidas} pct={`${hitRate.toFixed(2).replace('.', ',')}%`} status="success" />
+                      <FlowNode title="🔴 Não Atendeu" count={totalNaoAtendidas} pct={`${(totalDiscados > 0 ? (totalNaoAtendidas / totalDiscados) * 100 : 0).toFixed(2).replace('.', ',')}%`} status="danger" />
                     </div>
 
-                    {/* Etapa 4 */}
+                    {/* Etapa 4: SMS Enviados */}
                     <div className="flex flex-col gap-2.5">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">4. Qualificação</span>
-                      <FlowNode title="CPC (Titular)" count={totalAtendidas || 81} pct={`${localizacaoRate > 0 ? localizacaoRate.toFixed(1) : '10,2'}%`} status="success" />
-                      <FlowNode title="Não CPC" count={Math.round(totalAtendidas * 0.9) || 701} pct="88,6%" status="neutral" />
-                    </div>
-
-                    {/* Etapa 5 */}
-                    <div className="flex flex-col gap-2.5">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">5. Envio Linha</span>
-                      <FlowNode title="CPCA / SMS" count={totalSms || 17} pct={`${conversaoRate > 0 ? conversaoRate.toFixed(1) : '21,0'}%`} status="success" />
-                      <FlowNode title="Não CPCA" count={Math.max(0, totalAtendidas - totalSms) || 64} pct="79,0%" status="warning" />
-                    </div>
-
-                    {/* Etapa 6 */}
-                    <div className="flex flex-col gap-2.5">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">6. Conversão</span>
-                      <FlowNode title="Acordos / Linha" count={totalSms || 17} pct="100%" status="success" />
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">4. SMS Enviados</span>
+                      <FlowNode title="✉️ SMS com Linha Entregue" count={totalSms} pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} status="success" />
+                      {totalAtendidas > totalSms && (
+                        <FlowNode title="🟡 Não Enviado / Quarentena" count={totalAtendidas - totalSms} pct={`${(100 - conversaoRate).toFixed(2).replace('.', ',')}%`} status="warning" />
+                      )}
                     </div>
                   </div>
                 </div>
