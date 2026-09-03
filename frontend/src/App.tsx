@@ -1355,15 +1355,23 @@ export default function App() {
                           <td className="py-3 px-4 font-bold text-slate-700">{formatBRL(l.debt_value)}</td>
                           <td className="py-3 px-4">{l.due_date}</td>
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded border font-bold text-[10px] ${
-                              (l.occurrence?.includes('ATENDEU') || l.occurrence?.includes('CONFIRMOU') || l.occurrence?.includes('ENVIO SMS')) 
+                            {(() => {
+                              const occ = (l.occurrence || (l.call_status === 'completed' ? 'ATENDEU - SMS ENVIADO' : 'NÃO ATENDEU')).toUpperCase();
+                              const isAnswered = (occ.startsWith('ATENDEU') && !occ.includes('NÃO')) || occ.includes('CONFIRMOU') || occ.includes('ENVIO SMS');
+                              const is3Days = occ.includes('3 DIAS') || occ.includes('QUARENTENA');
+
+                              const badgeColor = isAnswered 
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : (l.occurrence?.includes('3 DIAS') || l.occurrence?.includes('QUARENTENA'))
+                                : is3Days 
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : 'bg-rose-50 text-rose-700 border-rose-200'
-                            }`}>
-                              {l.occurrence || 'NÃO ATENDEU'}
-                            </span>
+                                : 'bg-rose-50 text-rose-700 border-rose-200';
+
+                              return (
+                                <span className={`px-2 py-0.5 rounded border font-bold text-[10px] inline-block ${badgeColor}`}>
+                                  {l.occurrence || (l.call_status === 'completed' ? 'ATENDEU - SMS ENVIADO' : 'NÃO ATENDEU')}
+                                </span>
+                              );
+                            })()}
                           </td>
 
                           {/* Transcrição */}
