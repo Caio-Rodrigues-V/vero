@@ -78,9 +78,9 @@ app.get('/api/dashboard/stats', (req, res) => {
       let query = `
         SELECT 
           COUNT(id) as total_leads,
-          SUM(CASE WHEN call_status != 'pending' THEN 1 ELSE 0 END) as total_processed,
-          SUM(CASE WHEN call_status = 'completed' OR occurrence LIKE '%ATENDEU%' THEN 1 ELSE 0 END) as total_successful_calls,
-          SUM(CASE WHEN call_status = 'failed' AND (occurrence NOT LIKE '%ATENDEU%' OR occurrence IS NULL) THEN 1 ELSE 0 END) as total_failed_calls,
+          SUM(CASE WHEN call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
+          SUM(CASE WHEN call_status = 'completed' OR (occurrence LIKE 'ATENDEU%' AND occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
+          SUM(CASE WHEN call_status = 'failed' OR occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
           SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
           SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms
         FROM leads
@@ -93,7 +93,6 @@ app.get('/api/dashboard/stats', (req, res) => {
       }
 
       const dayStats = get(query, params) || {};
-      
       const campStats = get('SELECT COUNT(id) as total_campaigns, SUM(total_leads) as total_base FROM campaigns');
 
       return res.json({
@@ -212,7 +211,7 @@ app.get('/api/dashboard/hourly-stats', (req, res) => {
         occurrence,
         COUNT(id) as count
       FROM leads
-      WHERE call_status != 'pending' AND updated_at IS NOT NULL
+      WHERE call_status IN ('completed', 'failed') AND updated_at IS NOT NULL
     `;
     const params = [];
 
@@ -239,7 +238,7 @@ app.get('/api/dashboard/hourly-stats', (req, res) => {
         hoursMap[h].discados += cnt;
 
         const occ = (row.occurrence || '').toUpperCase();
-        const isAnswered = occ.includes('ATENDEU') || occ.includes('CONFIRMOU') || occ.includes('ENVIO SMS') || row.call_status === 'completed';
+        const isAnswered = row.call_status === 'completed' || (occ.startsWith('ATENDEU') && !occ.includes('NÃO'));
         const is3Days = occ.includes('3 DIAS') || occ.includes('QUARENTENA');
 
         if (isAnswered) {
