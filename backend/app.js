@@ -128,6 +128,89 @@ app.get('/api/dashboard/occurrences', (req, res) => {
 });
 
 /**
+ * Rota para obter estatísticas agregadas por hora do dia para o dashboard
+ */
+app.get('/api/dashboard/hourly-stats', (req, res) => {
+  const { campaignId, startHour = 8, endHour = 21, date } = req.query;
+  const sH = parseInt(startHour, 10) || 8;
+  const eH = parseInt(endHour, 10) || 21;
+
+  try {
+    const hoursMap = {};
+    for (let h = sH; h <= eH; h++) {
+      const label = `${String(h).padStart(2, '0')}h`;
+      hoursMap[h] = {
+        hour: label,
+        hourNum: h,
+        discados: 0,
+        atendeu: 0,
+        naoAtendeu: 0,
+        quarentena3Dias: 0,
+        smsEnviados: 0
+      };
+    }
+
+    let query = `
+      SELECT 
+        CAST(strftime('%H', datetime(updated_at, '-3 hours')) AS INTEGER) as hour_num,
+        call_status,
+        sms_status,
+        occurrence,
+        COUNT(id) as count
+      FROM leads
+      WHERE call_status != 'pending' AND updated_at IS NOT NULL
+    `;
+    const params = [];
+
+    if (campaignId && campaignId !== 'all') {
+      query += ' AND campaign_id = ?';
+      params.push(campaignId);
+    }
+
+    if (date) {
+      query += " AND date(datetime(updated_at, '-3 hours')) = date(?)";
+      params.push(date);
+    }
+
+    query += `
+      GROUP BY hour_num, call_status, sms_status, occurrence
+    `;
+
+    const rows = all(query, params);
+
+    for (const row of rows) {
+      const h = row.hour_num;
+      if (hoursMap[h]) {
+        const cnt = row.count;
+        hoursMap[h].discados += cnt;
+
+        const occ = (row.occurrence || '').toUpperCase();
+        const isAnswered = occ.includes('ATENDEU') || occ.includes('CONFIRMOU') || occ.includes('ENVIO SMS') || row.call_status === 'completed';
+        const is3Days = occ.includes('3 DIAS') || occ.includes('QUARENTENA');
+
+        if (isAnswered) {
+          hoursMap[h].atendeu += cnt;
+        } else if (is3Days) {
+          hoursMap[h].quarentena3Dias += cnt;
+        } else {
+          hoursMap[h].naoAtendeu += cnt;
+        }
+
+        if (row.sms_status === 'completed' || occ.includes('ENVIO SMS') || occ.includes('SMS ENVIADO')) {
+          hoursMap[h].smsEnviados += cnt;
+        }
+      }
+    }
+
+    const result = Object.values(hoursMap).sort((a, b) => a.hourNum - b.hourNum);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching hourly stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Listar todas as campanhas
  */
 app.get('/api/campaigns', (req, res) => {

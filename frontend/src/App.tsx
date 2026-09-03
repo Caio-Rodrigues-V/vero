@@ -347,9 +347,9 @@ export default function App() {
   const leadsPageRef = useRef(leadsPage);
   leadsPageRef.current = leadsPage;
 
-  const fetchHourlyStats = async (campaignId: number | 'all' = selectedCampaignId || 'all', sH: number = startHour, eH: number = endHour) => {
+  const fetchHourlyStats = async (campaignId: number | 'all' = selectedCampaignId || 'all', sH: number = startHour, eH: number = endHour, dt: string = selectedDate) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/hourly-stats?campaignId=${campaignId}&startHour=${sH}&endHour=${eH}`);
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/hourly-stats?campaignId=${campaignId}&startHour=${sH}&endHour=${eH}&date=${dt}`);
       if (res.ok) {
         const data = await res.json();
         setHourlyData(data);
@@ -363,19 +363,20 @@ export default function App() {
   useEffect(() => {
     fetchStats();
     fetchCampaigns();
+    fetchOccurrences(selectedCampaignId || 'all');
+    fetchHourlyStats(selectedCampaignId || 'all', startHour, endHour, selectedDate);
+    fetchLeads(selectedCampaignId || 'all', leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
 
     const interval = setInterval(() => {
       fetchStats();
       fetchCampaigns();
       fetchOccurrences(selectedCampaignId || 'all');
-      fetchHourlyStats(selectedCampaignId || 'all', startHour, endHour);
-      if (selectedCampaignId) {
-        fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
-      }
+      fetchHourlyStats(selectedCampaignId || 'all', startHour, endHour, selectedDate);
+      fetchLeads(selectedCampaignId || 'all', leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour]);
+  }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour, selectedDate]);
 
   const fetchStats = async () => {
     try {
@@ -748,7 +749,7 @@ export default function App() {
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer max-w-[220px]"
                       >
-                        <option value="all">Todas as Filas Selecionadas</option>
+                        <option value="all">Todas as Campanhas</option>
                         {campaigns.map(c => (
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
@@ -763,7 +764,7 @@ export default function App() {
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setStartHour(val);
-                          fetchHourlyStats(selectedCampaignId || 'all', val, endHour);
+                          fetchHourlyStats(selectedCampaignId || 'all', val, endHour, selectedDate);
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
                       >
@@ -777,7 +778,7 @@ export default function App() {
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setEndHour(val);
-                          fetchHourlyStats(selectedCampaignId || 'all', startHour, val);
+                          fetchHourlyStats(selectedCampaignId || 'all', startHour, val, selectedDate);
                         }}
                         className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
                       >
@@ -865,9 +866,9 @@ export default function App() {
                             contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', fontSize: '12px', fontFamily: 'Geist, sans-serif' }} 
                           />
                           <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '14px' }} iconType="circle" />
-                          <Bar dataKey="atendeu" name="🟢 Atendeu (Alô)" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} barSize={28} />
-                          <Bar dataKey="naoAtendeu" name="🔴 Não Atende" stackId="a" fill="#F43F5E" radius={[0, 0, 0, 0]} barSize={28} />
-                          <Bar dataKey="quarentena3Dias" name="🟡 SMS 3 Dias" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={28} />
+                          <Bar dataKey="atendeu" name="🟢 ATENDEU - SMS ENVIADO" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} barSize={28} />
+                          <Bar dataKey="naoAtendeu" name="🔴 NÃO ATENDEU" stackId="a" fill="#F43F5E" radius={[0, 0, 0, 0]} barSize={28} />
+                          <Bar dataKey="quarentena3Dias" name="🟡 SMS ENVIADO 3 DIAS" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} barSize={28} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -936,16 +937,16 @@ export default function App() {
                     {/* Etapa 3: Taxa de Alô */}
                     <div className="flex flex-col gap-2.5">
                       <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">3. Taxa de Alô (Hit)</span>
-                      <FlowNode title="🟢 Atendeu (Alô)" count={totalAtendidas} pct={`${hitRate.toFixed(2).replace('.', ',')}%`} status="success" />
-                      <FlowNode title="🔴 Não Atendeu" count={totalNaoAtendidas} pct={`${(totalDiscados > 0 ? (totalNaoAtendidas / totalDiscados) * 100 : 0).toFixed(2).replace('.', ',')}%`} status="danger" />
+                      <FlowNode title="🟢 ATENDEU - SMS ENVIADO" count={totalAtendidas} pct={`${hitRate.toFixed(2).replace('.', ',')}%`} status="success" />
+                      <FlowNode title="🔴 NÃO ATENDEU" count={totalNaoAtendidas} pct={`${(totalDiscados > 0 ? (totalNaoAtendidas / totalDiscados) * 100 : 0).toFixed(2).replace('.', ',')}%`} status="danger" />
                     </div>
 
                     {/* Etapa 4: SMS Enviados */}
                     <div className="flex flex-col gap-2.5">
                       <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">4. SMS Enviados</span>
-                      <FlowNode title="✉️ SMS com Linha Entregue" count={totalSms} pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} status="success" />
+                      <FlowNode title="✉️ SMS ENVIADO COM SUCESSO" count={totalSms} pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} status="success" />
                       {totalAtendidas > totalSms && (
-                        <FlowNode title="🟡 Não Enviado / Quarentena" count={totalAtendidas - totalSms} pct={`${(100 - conversaoRate).toFixed(2).replace('.', ',')}%`} status="warning" />
+                        <FlowNode title="🟡 SMS ENVIADO 3 DIAS" count={totalAtendidas - totalSms} pct={`${(100 - conversaoRate).toFixed(2).replace('.', ',')}%`} status="warning" />
                       )}
                     </div>
                   </div>
