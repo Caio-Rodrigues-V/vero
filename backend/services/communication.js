@@ -29,7 +29,7 @@ function formatBarcodeForBoleto(code) {
 function buildDdmShortMessage(lead, valorFormatado) {
   if (lead.barcode) {
     const formattedCode = formatBarcodeForBoleto(lead.barcode);
-    return limitSmsMessage(`${formattedCode}\nVero: fatura em aberto ${valorFormatado}.`);
+    return limitSmsMessage(`${formattedCode} Vero: fatura em aberto ${valorFormatado}.`);
   }
   return limitSmsMessage(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
 }
@@ -474,10 +474,11 @@ async function executeDdmShortSmsWithRetry(lead) {
   // Enviar a mensagem 100% limpa apenas com o texto da Vero e os 47 dígitos puros (sem nenhum link, URL ou domínio de site)
   const cleanBarcode = String(lead.barcode || '').replace(/\D/g, '').trim();
   const messageText = lead.barcode
-  ? `${cleanBarcode}\nVero: fatura em aberto ${valorFormatado}.`
-  : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
+    ? `${cleanBarcode} Vero: fatura em aberto ${valorFormatado}.`
+    : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 
-  const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(messageText)}`;
+  const msgCleaned = messageText.replace(/[\r\n]+/g, ' ').trim();
+  const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(msgCleaned)}`;
 
   let lastError = null;
 
