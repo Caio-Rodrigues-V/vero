@@ -467,10 +467,10 @@ async function executeDdmShortSmsWithRetry(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
-  // Enviar em 1 ÚNICO SMS com a linha digitável corrida de 47 dígitos (sem espaços internos) para o iOS/Android destacar o código inteiro
+  // Formatar com link https:// para o iOS e Android renderizarem 100% em AZUL CLICÁVEL no SMS
   const cleanBarcode = String(lead.barcode || '').replace(/\D/g, '').trim();
   const messageText = lead.barcode
-    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${cleanBarcode}`
+    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: https://ddmacordos.com/pagar/${cleanBarcode}`
     : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 
   const msgCleaned = messageText.replace(/[\r\n]+/g, ' ');
