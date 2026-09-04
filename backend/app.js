@@ -1251,6 +1251,84 @@ app.all('/api/tools/send-test-sms', async (req, res) => {
 });
 
 /**
+ * Audita os envios de SMS de hoje no banco de dados
+ */
+app.all('/api/tools/audit-today-sms', (req, res) => {
+  try {
+    const answeredLeads = all(`
+      SELECT id, name, phone, debt_value, barcode, occurrence, sms_status, sms_log, updated_at
+      FROM leads
+      WHERE (occurrence LIKE '%ATENDEU%' OR call_status = 'completed')
+        AND updated_at >= date('now', 'start of day')
+      ORDER BY id DESC
+    `);
+
+    const summary = {
+      totalAtendeu: answeredLeads.length,
+      smsCompleted: answeredLeads.filter(l => l.sms_status === 'completed').length,
+      smsFailed: answeredLeads.filter(l => l.sms_status === 'failed').length,
+      smsPending: answeredLeads.filter(l => l.sms_status === 'pending' || !l.sms_status).length,
+      sampleLogs: answeredLeads.slice(0, 10).map(l => ({
+        id: l.id,
+        phone: l.phone,
+        sms_status: l.sms_status,
+        sms_log: l.sms_log,
+        updated_at: l.updated_at
+      }))
+    };
+
+    res.json({ success: true, summary, leads: answeredLeads });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Reenvia o SMS de forma garantida para todos os leads que atenderam hoje
+ */
+app.all('/api/tools/resend-answered-sms', async (req, res) => {
+  try {
+    const answeredLeads = all(`
+      SELECT id, name, phone, debt_value, barcode, campaign_id
+      FROM leads
+      WHERE (occurrence LIKE '%ATENDEU%' OR call_status = 'completed')
+        AND barcode IS NOT NULL
+        AND barcode != ''
+        AND updated_at >= date('now', 'start of day')
+    `);
+
+    const { triggerDdmShortSms } = require('./services/communication.js');
+
+    // Disparar em background
+    (async () => {
+      let sentCount = 0;
+      let failedCount = 0;
+      for (const lead of answeredLeads) {
+        try {
+          const result = await triggerDdmShortSms(lead);
+          if (result.success) {
+            run("UPDATE leads SET sms_status = 'completed', sms_log = ? WHERE id = ?", [result.log, lead.id]);
+            sentCount++;
+          } else {
+            failedCount++;
+          }
+          await new Promise(r => setTimeout(r, 100)); // 10 envios por segundo
+        } catch (e) {}
+      }
+      console.log(`[RESEND AUDIT] Finalizado reenvio de ${sentCount} SMS com sucesso (${failedCount} falhas).`);
+    })();
+
+    res.json({
+      success: true,
+      message: `Iniciado reenvio garantido para ${answeredLeads.length} leads atendidos de hoje!`,
+      totalLeads: answeredLeads.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * Endpoint de callback para o n8n atualizar o status do lead
  */
 app.post('/api/leads/update', (req, res) => {
