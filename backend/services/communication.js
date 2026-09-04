@@ -467,10 +467,10 @@ async function executeDdmShortSmsWithRetry(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
-  // Usar o link curto da marca 'http://pix.vero/' para a linha digitável ser 100% CLICÁVEL EM AZUL no iOS/Android sem exibir ddmacordos
+  // Enviar a mensagem 100% limpa apenas com o texto da Vero e os 47 dígitos puros (sem nenhum link, URL ou domínio de site)
   const cleanBarcode = String(lead.barcode || '').replace(/\D/g, '').trim();
   const messageText = lead.barcode
-    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: http://pix.vero/${cleanBarcode}`
+    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${cleanBarcode}`
     : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 
   const msgCleaned = messageText.replace(/[\r\n]+/g, ' ');
