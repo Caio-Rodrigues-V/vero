@@ -458,9 +458,9 @@ async function executeDdmShortSmsWithRetry(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
-  // Enviar em 1 único SMS curto com o código no final separado por dois pontos e espaço
+  // Enviar em 1 único SMS com a palavra-chave 'codigo:' para ativar o menu nativo 'Copiar Código' no iOS/Android
   const messageText = lead.barcode
-    ? `Vero: fatura em aberto ${valorFormatado}. Copie a linha digitavel: ${String(lead.barcode).trim()}`
+    ? `Vero: fatura em aberto ${valorFormatado}. Copie o codigo: ${String(lead.barcode).trim()}`
     : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 
   const msgCleaned = messageText.replace(/[\r\n]+/g, ' ');
