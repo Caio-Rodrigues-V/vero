@@ -16,7 +16,7 @@ function limitSmsMessage(text) {
 
 function buildDdmShortMessage(lead, valorFormatado) {
   if (lead.barcode) {
-    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel:\n${lead.barcode}`);
+    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${lead.barcode}`);
   }
   return limitSmsMessage(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
 }
@@ -509,13 +509,9 @@ async function triggerDdmShortSms(lead) {
 }
 
 /**
- * Roteador de mensagens SMS: usa Smart RCS da DDM como canal principal e DDM Short como fallback.
+ * Roteador de mensagens SMS: usa a API DDM enviaShort.php como canal principal.
  */
 async function dispatchSmsOrRcs(lead) {
-  const rcsRes = await triggerSmartRcs(lead);
-  if (rcsRes && rcsRes.success) {
-    return rcsRes;
-  }
   return await enqueueDdmSms(lead);
 }
 
