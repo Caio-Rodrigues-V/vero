@@ -467,38 +467,49 @@ async function executeDdmShortSmsWithRetry(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
-  // Formatar o código no padrão bancário (AAAAA.BBBBB CCCCC.DDDDDD EEEEE.FFFFFF G HHHHHHHHHHHHHH)
-  const formattedCode = formatBarcodeForBoleto(lead.barcode);
-  const messageText = lead.barcode
-    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${formattedCode}`
-    : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
-
-  const msgCleaned = messageText.replace(/[\r\n]+/g, ' ');
-  const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(msgCleaned)}`;
+  // Se houver código de barras, envia primeiro o aviso e em seguida um 2º SMS contendo APENAS a linha digitável corrida de 47 dígitos para destacar a linha inteira no celular
+  const messagesToSend = [];
+  if (lead.barcode) {
+    messagesToSend.push(`Vero: fatura em aberto ${valorFormatado}. Segue linha digitavel abaixo:`);
+    messagesToSend.push(String(lead.barcode).replace(/\D/g, '').trim());
+  } else {
+    messagesToSend.push(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
+  }
 
   let lastError = null;
+  let lastResponseText = '';
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      console.log(`[DDM SMS] Enviando 1 SMS para ${cleanedPhone} (Tentativa ${attempt}/3)...`);
+      console.log(`[DDM SMS] Enviando ${messagesToSend.length} SMS(s) para ${cleanedPhone} (Tentativa ${attempt}/3)...`);
       
-      let response;
-      try {
-        response = await sendDdmHttpRequest(url);
-      } catch (nativeErr) {
-        response = await fetch(url, { method: 'GET' });
+      for (let i = 0; i < messagesToSend.length; i++) {
+        const msgCleaned = messagesToSend[i].replace(/[\r\n]+/g, ' ');
+        const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(msgCleaned)}`;
+        
+        let response;
+        try {
+          response = await sendDdmHttpRequest(url);
+        } catch (nativeErr) {
+          response = await fetch(url, { method: 'GET' });
+        }
+
+        const responseText = await response.text();
+        lastResponseText = responseText;
+
+        if (!response.ok) {
+          throw new Error(`Erro API DDM SMS: ${response.status} - ${responseText}`);
+        }
+
+        if (i < messagesToSend.length - 1) {
+          await new Promise(r => setTimeout(r, 600));
+        }
       }
 
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        throw new Error(`Erro API DDM SMS: ${response.status} - ${responseText}`);
-      }
-
-      console.log(`[DDM SMS] Mensagem enviada com sucesso para Lead #${lead.id}: ${responseText}`);
+      console.log(`[DDM SMS] Mensagens enviadas com sucesso para Lead #${lead.id}: ${lastResponseText}`);
       return {
         success: true,
-        log: `[DDM SMS] Enviado com sucesso em 1 unico SMS. Resposta: ${responseText || 'OK'}`
+        log: `[DDM SMS] Enviado com sucesso em 2 etapas (Texto + Código 47 dígitos isolado). Resposta: ${lastResponseText || 'OK'}`
       };
     } catch (error) {
       lastError = error;
