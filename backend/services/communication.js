@@ -509,9 +509,13 @@ async function triggerDdmShortSms(lead) {
 }
 
 /**
- * Roteador de mensagens SMS: usa a fila da API curta da DDM como canal principal.
+ * Roteador de mensagens SMS: usa Smart RCS da DDM como canal principal e DDM Short como fallback.
  */
 async function dispatchSmsOrRcs(lead) {
+  const rcsRes = await triggerSmartRcs(lead);
+  if (rcsRes && rcsRes.success) {
+    return rcsRes;
+  }
   return await enqueueDdmSms(lead);
 }
 
