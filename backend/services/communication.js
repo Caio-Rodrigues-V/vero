@@ -499,10 +499,21 @@ async function executeDdmShortSmsWithRetry(lead) {
         throw new Error(`Erro API DDM SMS: ${response.status} - ${responseText}`);
       }
 
-      console.log(`[DDM SMS] SMS enviado com sucesso para Lead #${lead.id}: ${responseText}`);
+      // Validação estrita: se a API da DDM devolver apenas '<br>' ou resposta vazia sem transacaoId/sucesso, aciona retry
+      const isBrokerAccepted = responseText.includes('Message sent successfully') || 
+                               responseText.includes('transacaoId') || 
+                               responseText.includes('"id"') ||
+                               responseText.includes('sucesso') ||
+                               responseText.includes('OK');
+
+      if (!isBrokerAccepted && (responseText.trim() === '<br>' || responseText.trim() === '')) {
+        throw new Error(`API DDM não gerou ID de envio na Smart SMS (retornou apenas <br>).`);
+      }
+
+      console.log(`[DDM SMS] SMS aceito com sucesso pela Smart SMS para Lead #${lead.id}: ${responseText}`);
       return {
         success: true,
-        log: `[DDM SMS] Enviado com sucesso em 1 unico SMS. Resposta: ${responseText || 'OK'}`
+        log: `[DDM SMS] Enviado e aceito na Smart SMS. Resposta: ${responseText || 'OK'}`
       };
     } catch (error) {
       lastError = error;
