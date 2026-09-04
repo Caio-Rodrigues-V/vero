@@ -14,9 +14,18 @@ function limitSmsMessage(text) {
   return String(text).slice(0, 160);
 }
 
+function formatBarcodeForBoleto(code) {
+  const d = String(code || '').replace(/\D/g, '');
+  if (d.length === 47) {
+    return d.slice(0,5) + '.' + d.slice(5,10) + ' ' + d.slice(10,15) + '.' + d.slice(15,21) + ' ' + d.slice(21,26) + '.' + d.slice(26,32) + ' ' + d.slice(32,33) + ' ' + d.slice(33);
+  }
+  return String(code || '').trim();
+}
+
 function buildDdmShortMessage(lead, valorFormatado) {
   if (lead.barcode) {
-    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${lead.barcode}`);
+    const formattedCode = formatBarcodeForBoleto(lead.barcode);
+    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${formattedCode}`);
   }
   return limitSmsMessage(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
 }
@@ -458,9 +467,10 @@ async function executeDdmShortSmsWithRetry(lead) {
 
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lead.debt_value);
 
-  // Enviar em 1 único SMS com a palavra-chave 'codigo:' para ativar o menu nativo 'Copiar Código' no iOS/Android
+  // Formatar o código no padrão bancário (AAAAA.BBBBB CCCCC.DDDDDD EEEEE.FFFFFF G HHHHHHHHHHHHHH)
+  const formattedCode = formatBarcodeForBoleto(lead.barcode);
   const messageText = lead.barcode
-    ? `Vero: fatura em aberto ${valorFormatado}. Copie o codigo: ${String(lead.barcode).trim()}`
+    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${formattedCode}`
     : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 
   const msgCleaned = messageText.replace(/[\r\n]+/g, ' ');
