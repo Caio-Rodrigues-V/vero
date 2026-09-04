@@ -7,7 +7,11 @@ const MINHA_VERO_APP_LINKS = [
 ].join('\n');
 
 function buildPaymentMessage(lead, valorFormatado) {
-  return `Vero: Olá ${lead.name}, segue a Linha Digitável para pagamento da sua fatura em atraso no valor de ${valorFormatado}:\n\n${lead.barcode}\n\nBaixe o app Minha Vero:\n${MINHA_VERO_APP_LINKS}`;
+  const cleanBarcode = String(lead.barcode || '').replace(/\D/g, '').trim();
+  if (cleanBarcode) {
+    return `${cleanBarcode}\nVero: fatura em aberto ${valorFormatado}.`;
+  }
+  return `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 }
 
 function limitSmsMessage(text) {
@@ -25,7 +29,7 @@ function formatBarcodeForBoleto(code) {
 function buildDdmShortMessage(lead, valorFormatado) {
   if (lead.barcode) {
     const formattedCode = formatBarcodeForBoleto(lead.barcode);
-    return limitSmsMessage(`Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${formattedCode}`);
+    return limitSmsMessage(`${formattedCode}\nVero: fatura em aberto ${valorFormatado}.`);
   }
   return limitSmsMessage(`Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`);
 }
@@ -470,11 +474,10 @@ async function executeDdmShortSmsWithRetry(lead) {
   // Enviar a mensagem 100% limpa apenas com o texto da Vero e os 47 dígitos puros (sem nenhum link, URL ou domínio de site)
   const cleanBarcode = String(lead.barcode || '').replace(/\D/g, '').trim();
   const messageText = lead.barcode
-    ? `Vero: fatura em aberto ${valorFormatado}. Linha digitavel: ${cleanBarcode}`
-    : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
+  ? `${cleanBarcode}\nVero: fatura em aberto ${valorFormatado}.`
+  : `Vero: obrigado por atender nosso contato. Em breve enviaremos mais informacoes sobre sua fatura.`;
 
-  const msgCleaned = messageText.replace(/[\r\n]+/g, ' ');
-  const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(msgCleaned)}`;
+  const url = `${apiUrl}?tel_envio=${encodeURIComponent(cleanedPhone)}&msg_envio=${encodeURIComponent(messageText)}`;
 
   let lastError = null;
 
