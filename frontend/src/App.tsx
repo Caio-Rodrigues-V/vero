@@ -224,8 +224,8 @@ export default function App() {
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
 
-  // Dialer Provider (VAPI vs Retell AI)
-  const [dialerProvider, setDialerProvider] = useState<'vapi' | 'retell'>('vapi');
+  // Dialer Provider (Dialog DDM vs VAPI vs Retell AI)
+  const [dialerProvider, setDialerProvider] = useState<'dialddm' | 'vapi' | 'retell'>('dialddm');
   const [retellAgents, setRetellAgents] = useState<{ id: string; name: string }[]>([]);
   const [retellPhoneNumbers, setRetellPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
 
@@ -252,7 +252,7 @@ export default function App() {
       const res = await fetch(`${BACKEND_URL}/api/system-info`);
       if (res.ok) {
         const data = await res.json();
-        if (data.defaultUploadDialerProvider === 'vapi' || data.defaultUploadDialerProvider === 'retell') {
+        if (data.defaultUploadDialerProvider === 'dialddm' || data.defaultUploadDialerProvider === 'vapi' || data.defaultUploadDialerProvider === 'retell') {
           setDialerProvider(data.defaultUploadDialerProvider);
         }
       }
@@ -1053,9 +1053,10 @@ export default function App() {
                     </label>
                     <select 
                       value={dialerProvider} 
-                      onChange={(e) => setDialerProvider(e.target.value as 'vapi' | 'retell')}
+                      onChange={(e) => setDialerProvider(e.target.value as 'dialddm' | 'vapi' | 'retell')}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
                     >
+                      <option value="dialddm">Dialog DDM (Infra Própria / Oktor 500ch)</option>
                       <option value="vapi">VAPI.ai (Plataforma VAPI)</option>
                       <option value="retell">Retell AI (Plataforma Retell)</option>
                     </select>
@@ -1063,14 +1064,19 @@ export default function App() {
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Agente de Voz {dialerProvider === 'retell' ? 'Retell AI' : 'VAPI'}
+                      Agente de Voz {dialerProvider === 'dialddm' ? 'Dialog DDM' : dialerProvider === 'retell' ? 'Retell AI' : 'VAPI'}
                     </label>
                     <select 
                       value={selectedVapiAssistantId} 
                       onChange={(e) => setSelectedVapiAssistantId(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
                     >
-                      {dialerProvider === 'retell' ? (
+                      {dialerProvider === 'dialddm' ? (
+                        <>
+                          <option value="5">Assistente #5 - Verô Cobrança Recente (Oktor)</option>
+                          <option value="1">Assistente #1 - Verô Cobrança 50+ Dias</option>
+                        </>
+                      ) : dialerProvider === 'retell' ? (
                         retellAgents.map(ast => (
                           <option key={ast.id} value={ast.id}>
                             {ast.name}
@@ -1088,14 +1094,18 @@ export default function App() {
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Linha / Tronco Telefônico (BINA {dialerProvider === 'retell' ? 'Retell' : 'VAPI'})
+                      Linha / Tronco Telefônico (BINA {dialerProvider === 'dialddm' ? 'Dialog DDM' : dialerProvider === 'retell' ? 'Retell' : 'VAPI'})
                     </label>
                     <select 
                       value={selectedVapiPhoneNumberId} 
                       onChange={(e) => setSelectedVapiPhoneNumberId(e.target.value)}
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
                     >
-                      {dialerProvider === 'retell' ? (
+                      {dialerProvider === 'dialddm' ? (
+                        <>
+                          <option value="oktor_sip_500ch">OKTOR SIP (Tronco 500 Canais Oktor Telecom)</option>
+                        </>
+                      ) : dialerProvider === 'retell' ? (
                         retellPhoneNumbers.map(pn => (
                           <option key={pn.id} value={pn.id}>
                             {pn.name}
