@@ -120,7 +120,7 @@ function formatE164(phone) {
 async function makeDialDdmCall(lead) {
   const baseUrl = (process.env.DIALDDM_BASE_URL || process.env.VAPI_BASE_URL || 'https://dialddm.grupoddm.ia.br/v1').replace(/\/+$/, '');
   const apiKey = process.env.DIALDDM_API_KEY || process.env.VAPI_API_KEY || 'dialddm_live_key';
-  const defaultAssistantId = process.env.DIALDDM_DEFAULT_ASSISTANT_ID || process.env.DEFAULT_ASSISTANT_ID || '5';
+  const defaultAssistantId = process.env.DIALDDM_DEFAULT_ASSISTANT_ID || process.env.DEFAULT_ASSISTANT_ID || '6';
   const defaultPhoneNumberId = process.env.DIALDDM_PHONE_NUMBER_ID || 'oktor_sip_500ch';
   const maxConcurrency = parseInt(process.env.DIALDDM_MAX_CONCURRENCY || '50', 10);
 
@@ -312,8 +312,37 @@ async function getDialDdmTranscript(callId) {
   }
 }
 
+/**
+ * Lista todos os assistentes de voz cadastrados no Dialog DDM Gateway
+ */
+async function getDialDdmAssistants() {
+  const baseUrl = (process.env.DIALDDM_BASE_URL || process.env.VAPI_BASE_URL || 'https://dialddm.grupoddm.ia.br/v1').replace(/\/+$/, '');
+  const apiKey = process.env.DIALDDM_API_KEY || process.env.VAPI_API_KEY || 'dialddm_live_key';
+
+  try {
+    const res = await fetch(`${baseUrl}/assistants`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (!res.ok) {
+      const fallbackRes = await fetch(`${baseUrl}/assistant`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      });
+      if (!fallbackRes.ok) throw new Error(`HTTP ${res.status}`);
+      return await fallbackRes.json();
+    }
+    return await res.json();
+  } catch (err) {
+    console.error('[DIAL DDM ASSISTANTS ERROR]', err.message);
+    return [
+      { id: '6', name: 'Verô - Cobrança Recente', firstMessage: 'Olá, eu falo com {{nome_cliente}}, correto?' },
+      { id: '5', name: 'Agente Homologador DDM - Testes 213', firstMessage: 'Olá, tudo bem?' }
+    ];
+  }
+}
+
 module.exports = {
   makeDialDdmCall,
   getDialDdmConcurrency,
-  getDialDdmTranscript
+  getDialDdmTranscript,
+  getDialDdmAssistants
 };

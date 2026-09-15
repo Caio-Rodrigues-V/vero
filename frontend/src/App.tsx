@@ -226,6 +226,7 @@ export default function App() {
 
   // Dialer Provider (Dialog DDM vs VAPI vs Retell AI)
   const [dialerProvider, setDialerProvider] = useState<'dialddm' | 'vapi' | 'retell'>('dialddm');
+  const [dialddmAssistants, setDialddmAssistants] = useState<{ id: string; name: string }[]>([]);
   const [retellAgents, setRetellAgents] = useState<{ id: string; name: string }[]>([]);
   const [retellPhoneNumbers, setRetellPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
 
@@ -237,6 +238,7 @@ export default function App() {
   useEffect(() => {
     fetchStats();
     fetchCampaigns();
+    fetchDialDdmAssistants();
     fetchVapiAssistants();
     fetchVapiPhoneNumbers();
     fetchRetellAgents();
@@ -246,6 +248,26 @@ export default function App() {
     fetchLeads('all', 1);
     fetchSystemInfo();
   }, []);
+
+  const fetchDialDdmAssistants = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dialddm/assistants`);
+      if (res.ok) {
+        const data = await res.json();
+        setDialddmAssistants(data);
+        if (data.length > 0) {
+          const vero6 = data.find((a: any) => a.id === '6');
+          if (vero6) {
+            setSelectedVapiAssistantId(vero6.id);
+          } else if (!selectedVapiAssistantId) {
+            setSelectedVapiAssistantId(data[0].id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching Dialog DDM assistants:', err);
+    }
+  };
 
   const fetchSystemInfo = async () => {
     try {
@@ -475,7 +497,7 @@ export default function App() {
     setUploadSuccess('');
 
     const effectiveAssistantId = dialerProvider === 'dialddm'
-      ? (selectedVapiAssistantId && ['5', '1'].includes(selectedVapiAssistantId) ? selectedVapiAssistantId : '5')
+      ? (selectedVapiAssistantId || (dialddmAssistants.find(a => a.id === '6')?.id || dialddmAssistants[0]?.id || '6'))
       : (dialerProvider === 'retell'
         ? (selectedVapiAssistantId || (retellAgents[0]?.id || ''))
         : (selectedVapiAssistantId || (vapiAssistants[0]?.id || '')));
@@ -1084,10 +1106,18 @@ export default function App() {
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
                     >
                       {dialerProvider === 'dialddm' ? (
-                        <>
-                          <option value="5">Assistente #5 - Verô Cobrança Recente (Oktor)</option>
-                          <option value="1">Assistente #1 - Verô Cobrança 50+ Dias</option>
-                        </>
+                        dialddmAssistants.length > 0 ? (
+                          dialddmAssistants.map(ast => (
+                            <option key={ast.id} value={ast.id}>
+                              {ast.name}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="6">Assistente #6 - Verô - Cobrança Recente</option>
+                            <option value="5">Assistente #5 - Agente Homologador DDM - Testes 213</option>
+                          </>
+                        )
                       ) : dialerProvider === 'retell' ? (
                         retellAgents.map(ast => (
                           <option key={ast.id} value={ast.id}>

@@ -945,6 +945,23 @@ app.delete('/api/campaigns/:id', (req, res) => {
 });
 
 /**
+ * Rota para buscar os assistentes cadastrados no Dialog DDM Gateway
+ */
+app.get('/api/dialddm/assistants', async (req, res) => {
+  try {
+    const { getDialDdmAssistants } = require('./services/dialddm.js');
+    const assistants = await getDialDdmAssistants();
+    const mapped = assistants.map(ast => ({
+      id: String(ast.id),
+      name: `Assistente #${ast.id} - ${ast.name || 'Agente DDM'}`
+    }));
+    res.json(mapped);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * Rota para buscar os assistentes cadastrados na VAPI
  */
 app.get('/api/vapi/assistants', async (req, res) => {
