@@ -110,9 +110,87 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration, ta
   return 'ATENDEU - SMS ENVIADO';
 }
 
+/**
+ * Remove qualquer vazamento de prompt de persona/sistema da transcrição
+ */
+function cleanTranscript(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+
+  if (
+    cleaned.includes('# PERSONA') || 
+    cleaned.includes('Você é a Verô') || 
+    cleaned.includes('# REGRAS') || 
+    cleaned.includes('# ETAPA') || 
+    cleaned.includes('# CAIXA POSTAL') || 
+    cleaned.includes('# ANTI-ALUCINAÇÃO') || 
+    cleaned.includes('# CASUALIDADES')
+  ) {
+    const lines = cleaned.split(/\r?\n/);
+    const realLines = [];
+    let isInsidePrompt = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (
+        trimmed.startsWith('Cliente: #') || 
+        trimmed.startsWith('# ') || 
+        trimmed.startsWith('Você é a Verô') || 
+        trimmed.includes('Seu objetivo:') || 
+        trimmed.includes('ANTI-ALUCINAÇÃO') ||
+        trimmed.startsWith('# PERSONA')
+      ) {
+        isInsidePrompt = true;
+      }
+      
+      if (isInsidePrompt) {
+        const isSpeakerLine = (
+          trimmed.startsWith('Sofia:') || 
+          trimmed.startsWith('Vero:') || 
+          trimmed.startsWith('Verô:') || 
+          trimmed.startsWith('Cliente:') || 
+          trimmed.startsWith('Assistente:') ||
+          trimmed.startsWith('Bot:') ||
+          trimmed.startsWith('User:')
+        );
+        const isPromptRule = (
+          trimmed.includes('#') || 
+          trimmed.includes('PERSONA') || 
+          trimmed.includes('REGRAS') || 
+          trimmed.includes('ETAPA') || 
+          trimmed.includes('CASUALIDADES') || 
+          trimmed.includes('CAIXA POSTAL') ||
+          trimmed.includes('ANTI-ALUCINAÇÃO') ||
+          trimmed.includes('Você é a Verô')
+        );
+
+        if (isSpeakerLine && !isPromptRule) {
+          isInsidePrompt = false;
+          realLines.push(trimmed);
+        }
+      } else {
+        realLines.push(line);
+      }
+    }
+    cleaned = realLines.join('\n').trim();
+  }
+
+  // Normalizar nomes de agentes para Vero / Cliente
+  cleaned = cleaned
+    .replace(/^Sofia:/gm, 'Vero:')
+    .replace(/^Verô:/gm, 'Vero:')
+    .replace(/^Assistente:/gm, 'Vero:')
+    .replace(/^Bot:/gm, 'Vero:')
+    .replace(/^User:/gm, 'Cliente:')
+    .replace(/^Customer:/gm, 'Cliente:');
+
+  return cleaned.trim();
+}
+
 module.exports = {
   validCpcOccurrences,
   normalizeText,
   extractCustomerSpeech,
-  classifyCallOccurrence
+  classifyCallOccurrence,
+  cleanTranscript
 };

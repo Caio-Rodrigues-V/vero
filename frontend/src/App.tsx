@@ -80,6 +80,78 @@ interface DashboardStats {
 
 const BACKEND_URL = window.location.origin.includes('localhost:5173') ? 'http://localhost:3001' : window.location.origin;
 
+function cleanDisplayTranscript(text: string | undefined): string {
+  if (!text) return 'Nenhuma transcrição ou registro gravado para esta chamada.';
+  let cleaned = text;
+  if (
+    cleaned.includes('# PERSONA') ||
+    cleaned.includes('Você é a Verô') ||
+    cleaned.includes('# REGRAS') ||
+    cleaned.includes('# ETAPA') ||
+    cleaned.includes('# CAIXA POSTAL') ||
+    cleaned.includes('# ANTI-ALUCINAÇÃO') ||
+    cleaned.includes('# CASUALIDADES')
+  ) {
+    const lines = cleaned.split(/\r?\n/);
+    const realLines: string[] = [];
+    let isInsidePrompt = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (
+        trimmed.startsWith('Cliente: #') ||
+        trimmed.startsWith('# ') ||
+        trimmed.startsWith('Você é a Verô') ||
+        trimmed.includes('Seu objetivo:') ||
+        trimmed.includes('ANTI-ALUCINAÇÃO') ||
+        trimmed.startsWith('# PERSONA')
+      ) {
+        isInsidePrompt = true;
+      }
+
+      if (isInsidePrompt) {
+        const isSpeakerLine = (
+          trimmed.startsWith('Sofia:') ||
+          trimmed.startsWith('Vero:') ||
+          trimmed.startsWith('Verô:') ||
+          trimmed.startsWith('Cliente:') ||
+          trimmed.startsWith('Assistente:') ||
+          trimmed.startsWith('Bot:') ||
+          trimmed.startsWith('User:')
+        );
+        const isPromptRule = (
+          trimmed.includes('#') ||
+          trimmed.includes('PERSONA') ||
+          trimmed.includes('REGRAS') ||
+          trimmed.includes('ETAPA') ||
+          trimmed.includes('CASUALIDADES') ||
+          trimmed.includes('CAIXA POSTAL') ||
+          trimmed.includes('ANTI-ALUCINAÇÃO') ||
+          trimmed.includes('Você é a Verô')
+        );
+
+        if (isSpeakerLine && !isPromptRule) {
+          isInsidePrompt = false;
+          realLines.push(trimmed);
+        }
+      } else {
+        realLines.push(line);
+      }
+    }
+    cleaned = realLines.join('\n').trim();
+  }
+
+  cleaned = cleaned
+    .replace(/^Sofia:/gm, 'Vero:')
+    .replace(/^Verô:/gm, 'Vero:')
+    .replace(/^Assistente:/gm, 'Vero:')
+    .replace(/^Bot:/gm, 'Vero:')
+    .replace(/^User:/gm, 'Cliente:')
+    .replace(/^Customer:/gm, 'Cliente:');
+
+  return cleaned.trim() || 'Nenhuma transcrição ou registro gravado para esta chamada.';
+}
+
 // Componente Moderno de KPI Card (Enterprise SaaS Style)
 interface KPICardProps {
   title: string;
@@ -1602,7 +1674,7 @@ export default function App() {
               )}
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transcrição / Histórico da Ligação</span>
               <div className="whitespace-pre-wrap font-mono text-slate-700 leading-relaxed bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                {selectedTranscriptLead.transcript || selectedTranscriptLead.call_log || 'Nenhuma transcrição ou registro gravado para esta chamada.'}
+                {cleanDisplayTranscript(selectedTranscriptLead.transcript || selectedTranscriptLead.call_log)}
               </div>
             </div>
 

@@ -10,7 +10,7 @@ const { parseSpreadsheet } = require('./utils/parser.js');
 const { triggerCampaignProcessor, startMonitorLoop } = require('./services/campaignExecutor.js');
 const { updateCampaignStats } = require('./services/stats.js');
 const xlsx = require('xlsx');
-const { classifyCallOccurrence, extractCustomerSpeech, normalizeText, validCpcOccurrences } = require('./utils/classifier.js');
+const { classifyCallOccurrence, extractCustomerSpeech, normalizeText, validCpcOccurrences, cleanTranscript } = require('./utils/classifier.js');
 
 dotenv.config();
 
@@ -554,7 +554,7 @@ function getVapiTranscript(call) {
       .join('\n');
   }
 
-  return transcript || '';
+  return cleanTranscript(transcript || '');
 }
 
 function getVapiRecordingUrl(call) {
@@ -1538,6 +1538,8 @@ app.post('/api/vapi-webhook', async (req, res) => {
         .join('\n');
     }
 
+    transcriptText = cleanTranscript(transcriptText);
+
     const recordingUrl = 
       message?.recordingUrl || 
       message?.stereoRecordingUrl || 
@@ -1972,11 +1974,11 @@ app.listen(PORT, () => {
     `);
 
     // Limpar transcrições que vazaram prompt de persona
-    run(`
-      UPDATE leads 
-      SET transcript = NULL
-      WHERE transcript LIKE '%# PERSONA%'
-    `);
+    const dirtyLeads = all("SELECT id, transcript FROM leads WHERE transcript LIKE '%# PERSONA%' OR transcript LIKE '%Você é a Verô%'");
+    for (const dl of dirtyLeads) {
+      const clean = cleanTranscript(dl.transcript);
+      run('UPDATE leads SET transcript = ? WHERE id = ?', [clean || null, dl.id]);
+    }
 
     if (res && res.changes > 0) {
       console.log(`[RECLASSIFY] Leads atualizados para as 3 tabulações oficiais.`);
