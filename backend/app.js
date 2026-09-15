@@ -95,13 +95,34 @@ app.get('/api/dashboard/stats', (req, res) => {
       }
 
       const dayStats = get(query, params) || {};
-      const campStats = get('SELECT COUNT(id) as total_campaigns, SUM(total_leads) as total_base FROM campaigns');
+
+      // Base de leads das campanhas operadas na data selecionada
+      let dayBase = 0;
+      let dayCampaignsCount = 0;
+      if (campaignId && campaignId !== 'all') {
+        const camp = get('SELECT total_leads FROM campaigns WHERE id = ?', [campaignId]);
+        dayBase = camp ? camp.total_leads : (dayStats.total_leads || 0);
+        dayCampaignsCount = 1;
+      } else {
+        const activeDayCamps = get(`
+          SELECT 
+            COUNT(DISTINCT c.id) as total_campaigns, 
+            SUM(c.total_leads) as total_base 
+          FROM campaigns c
+          WHERE c.id IN (
+            SELECT DISTINCT campaign_id 
+            FROM leads 
+            WHERE date(datetime(updated_at, '-3 hours')) = date(?)
+          )
+        `, [date]);
+
+        dayCampaignsCount = activeDayCamps ? (activeDayCamps.total_campaigns || 0) : 0;
+        dayBase = activeDayCamps && activeDayCamps.total_base ? activeDayCamps.total_base : (dayStats.total_leads || 0);
+      }
 
       return res.json({
-        total_campaigns: campStats ? campStats.total_campaigns : 0,
-        total_leads: (campaignId && campaignId !== 'all') 
-          ? (get('SELECT total_leads FROM campaigns WHERE id = ?', [campaignId])?.total_leads || dayStats.total_leads || 0)
-          : (campStats ? campStats.total_base : (dayStats.total_leads || 0)),
+        total_campaigns: dayCampaignsCount,
+        total_leads: dayBase || dayStats.total_processed || 0,
         total_processed: dayStats.total_processed || 0,
         total_successful_calls: dayStats.total_successful_calls || 0,
         total_failed_calls: dayStats.total_failed_calls || 0,

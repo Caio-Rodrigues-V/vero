@@ -628,15 +628,17 @@ export default function App() {
               : 'Acumulado Geral';
 
             // Totais Consolidados (Adaptam-se automaticamente ao filtro de Data e Campanha)
-            const totalLeadsBase = isSpecificCampaign
-              ? (activeCampaign ? activeCampaign.total_leads : 0)
-              : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0);
-
             const totalDiscados = isDateFiltered
               ? (stats.total_processed || 0)
               : (isSpecificCampaign
                   ? (activeCampaign ? activeCampaign.processed_leads : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0));
+
+            const totalLeadsBase = isDateFiltered
+              ? (stats.total_leads || (isSpecificCampaign ? (activeCampaign ? activeCampaign.total_leads : 0) : totalDiscados))
+              : (isSpecificCampaign
+                  ? (activeCampaign ? activeCampaign.total_leads : 0)
+                  : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0));
 
             const totalAtendidas = isDateFiltered
               ? (stats.total_successful_calls || 0)
@@ -656,15 +658,11 @@ export default function App() {
                   ? (activeCampaign ? activeCampaign.successful_sms : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) || stats.total_successful_sms || 0));
 
-            // Cálculo dos Spins (Giros da Base): Soma do progresso proporcional das campanhas
-            const totalSpins = campaigns.reduce((acc, c) => {
-              if (!c.total_leads || c.total_leads === 0) return acc;
-              return acc + (c.processed_leads / c.total_leads);
-            }, 0);
-
-            const activeSpins = isSpecificCampaign
-              ? (activeCampaign && activeCampaign.total_leads > 0 ? (activeCampaign.processed_leads / activeCampaign.total_leads) : 0)
-              : totalSpins;
+            // Cálculo dos Spins (Giros da Base):
+            // Proporção real entre o volume discado e a base de leads da operação
+            const activeSpins = totalLeadsBase > 0 
+              ? (totalDiscados / totalLeadsBase) 
+              : (totalDiscados > 0 ? 1.0 : 0);
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
@@ -845,7 +843,7 @@ export default function App() {
                   <ModernKPICard 
                     title="1. Base de Leads"
                     value={totalLeadsBase.toLocaleString('pt-BR')}
-                    subtitle={isDateFiltered ? "Total de leads carregados na plataforma" : "Total de leads carregados na plataforma"}
+                    subtitle={isDateFiltered ? `Base de leads operada em ${formattedDateLabel}` : "Total de leads carregados na plataforma"}
                     progress={100}
                     colorTheme="slate"
                     indicatorText="Base Total"
@@ -877,7 +875,7 @@ export default function App() {
                   <ModernKPICard 
                     title="Spins (Giros da Base)"
                     value={`${formattedSpins} Giros`}
-                    subtitle={isDateFiltered ? "Progresso acumulado da base" : (activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) completo(s)` : 'Giro em andamento')}
+                    subtitle={isDateFiltered ? (activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) no dia` : 'Giro em andamento no dia') : (activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) completo(s)` : 'Giro em andamento')}
                     progress={Math.min(100, (activeSpins % 1) * 100 || (activeSpins > 0 ? 100 : 0))}
                     colorTheme="cyan"
                     indicatorText="Giros Concluídos"
