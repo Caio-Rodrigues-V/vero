@@ -15,7 +15,8 @@ import {
   X,
   Filter,
   BarChart2,
-  Upload
+  Upload,
+  Calendar
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -288,15 +289,29 @@ export default function App() {
   const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
   const [exportOccurrenceFilter, setExportOccurrenceFilter] = useState<string>('all');
   
-  // BI e Métricas por Horário
+  // BI e Métricas por Horário e Filtro de Data
   const [hourlyData, setHourlyData] = useState<{ hour: string; atendeu: number; naoAtendeu: number; quarentena3Dias: number; total: number }[]>([]);
-  const [selectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>('all'); // 'all' para acumulado geral ou 'YYYY-MM-DD'
+  const [availableDates, setAvailableDates] = useState<{ date_str: string; total_processed: number; successful_calls: number; successful_sms: number }[]>([]);
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
 
-  const fetchOccurrences = async (campaignId: number | 'all' = 'all') => {
+  const fetchAvailableDates = async (campaignId: number | 'all' = selectedCampaignId) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/occurrences?campaignId=${campaignId}`);
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/available-dates?campaignId=${campaignId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableDates(data);
+      }
+    } catch (err) {
+      console.error('Error fetching available dates:', err);
+    }
+  };
+
+  const fetchOccurrences = async (campaignId: number | 'all' = 'all', dt: string = selectedDate) => {
+    try {
+      const dateQuery = (dt && dt !== 'all') ? `&date=${dt}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/occurrences?campaignId=${campaignId}${dateQuery}`);
       if (res.ok) {
         const data = await res.json();
         setOccurrences(data);
@@ -308,10 +323,11 @@ export default function App() {
 
   // Fetch initial data
   useEffect(() => {
-    fetchStats();
+    fetchStats(selectedCampaignId, selectedDate);
     fetchCampaigns();
-    fetchOccurrences('all');
-    fetchHourlyStats('all', 8, 21, selectedDate);
+    fetchOccurrences(selectedCampaignId, selectedDate);
+    fetchHourlyStats(selectedCampaignId, 8, 21, selectedDate);
+    fetchAvailableDates(selectedCampaignId);
     fetchLeads('all', 1);
   }, []);
 
@@ -336,7 +352,8 @@ export default function App() {
 
   const fetchHourlyStats = async (campaignId: number | 'all' = selectedCampaignId, sH: number = startHour, eH: number = endHour, dt: string = selectedDate) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/hourly-stats?campaignId=${campaignId}&startHour=${sH}&endHour=${eH}&date=${dt}`);
+      const dateQuery = (dt && dt !== 'all') ? `&date=${dt}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/hourly-stats?campaignId=${campaignId}&startHour=${sH}&endHour=${eH}${dateQuery}`);
       if (res.ok) {
         const data = await res.json();
         setHourlyData(data);
@@ -348,26 +365,29 @@ export default function App() {
 
   // Auto-refresh contínuo do dashboard a cada 3 segundos preservando filtros e busca
   useEffect(() => {
-    fetchStats(selectedCampaignId);
+    fetchStats(selectedCampaignId, selectedDate);
     fetchCampaigns();
-    fetchOccurrences(selectedCampaignId);
+    fetchOccurrences(selectedCampaignId, selectedDate);
     fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
+    fetchAvailableDates(selectedCampaignId);
     fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
 
     const interval = setInterval(() => {
-      fetchStats(selectedCampaignId);
+      fetchStats(selectedCampaignId, selectedDate);
       fetchCampaigns();
-      fetchOccurrences(selectedCampaignId);
+      fetchOccurrences(selectedCampaignId, selectedDate);
       fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
+      fetchAvailableDates(selectedCampaignId);
       fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
     }, 3000);
 
     return () => clearInterval(interval);
   }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour, selectedDate]);
 
-  const fetchStats = async (campaignId: number | 'all' = selectedCampaignId) => {
+  const fetchStats = async (campaignId: number | 'all' = selectedCampaignId, dt: string = selectedDate) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats?campaignId=${campaignId}`);
+      const dateQuery = (dt && dt !== 'all') ? `&date=${dt}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/stats?campaignId=${campaignId}${dateQuery}`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -390,8 +410,9 @@ export default function App() {
   };
 
   const handleSync = async () => {
-    fetchStats();
+    fetchStats(selectedCampaignId, selectedDate);
     fetchCampaigns();
+    fetchAvailableDates(selectedCampaignId);
     try {
       await fetch(`${BACKEND_URL}/api/leads/sync-recordings`, {
         method: 'POST',
@@ -421,9 +442,11 @@ export default function App() {
   const handleCampaignSelect = (id: number | 'all') => {
     setSelectedCampaignId(id);
     setLeadsPage(1);
+    fetchStats(id, selectedDate);
     fetchLeads(id, 1, statusFilterRef.current, searchTermRef.current);
-    fetchOccurrences(id);
+    fetchOccurrences(id, selectedDate);
     fetchHourlyStats(id, startHour, endHour, selectedDate);
+    fetchAvailableDates(id);
   };
 
   const handleDeleteCampaign = async (id: number) => {
@@ -596,28 +619,42 @@ export default function App() {
           {/* TAB 1: DASHBOARD OPERACIONAL EXECUTIVO */}
           {activeTab === 'dashboard' && (() => {
             const isSpecificCampaign = selectedCampaignId !== 'all';
+            const isDateFiltered = selectedDate && selectedDate !== 'all';
             const activeCampaign = isSpecificCampaign ? campaigns.find(c => c.id === selectedCampaignId) : null;
 
-            // Totais Consolidados (Soma das Campanhas para 100% de consistência)
+            // Formatação do label da data para os textos e badges
+            const formattedDateLabel = isDateFiltered
+              ? selectedDate.split('-').reverse().join('/')
+              : 'Acumulado Geral';
+
+            // Totais Consolidados (Adaptam-se automaticamente ao filtro de Data e Campanha)
             const totalLeadsBase = isSpecificCampaign
               ? (activeCampaign ? activeCampaign.total_leads : 0)
               : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0);
 
-            const totalDiscados = isSpecificCampaign
-              ? (activeCampaign ? activeCampaign.processed_leads : 0)
-              : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0);
+            const totalDiscados = isDateFiltered
+              ? (stats.total_processed || 0)
+              : (isSpecificCampaign
+                  ? (activeCampaign ? activeCampaign.processed_leads : 0)
+                  : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0));
 
-            const totalAtendidas = isSpecificCampaign
-              ? (activeCampaign ? activeCampaign.successful_calls : 0)
-              : (campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) || stats.total_successful_calls || 0);
+            const totalAtendidas = isDateFiltered
+              ? (stats.total_successful_calls || 0)
+              : (isSpecificCampaign
+                  ? (activeCampaign ? activeCampaign.successful_calls : 0)
+                  : (campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) || stats.total_successful_calls || 0));
 
-            const totalNaoAtendidas = isSpecificCampaign
-              ? (activeCampaign ? activeCampaign.failed_calls : 0)
-              : (campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) || stats.total_failed_calls || 0);
+            const totalNaoAtendidas = isDateFiltered
+              ? (stats.total_failed_calls || 0)
+              : (isSpecificCampaign
+                  ? (activeCampaign ? activeCampaign.failed_calls : 0)
+                  : (campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) || stats.total_failed_calls || 0));
 
-            const totalSms = isSpecificCampaign
-              ? (activeCampaign ? activeCampaign.successful_sms : 0)
-              : (campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) || stats.total_successful_sms || 0);
+            const totalSms = isDateFiltered
+              ? (stats.total_successful_sms || 0)
+              : (isSpecificCampaign
+                  ? (activeCampaign ? activeCampaign.successful_sms : 0)
+                  : (campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) || stats.total_successful_sms || 0));
 
             // Cálculo dos Spins (Giros da Base): Soma do progresso proporcional das campanhas
             const totalSpins = campaigns.reduce((acc, c) => {
@@ -631,7 +668,7 @@ export default function App() {
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
-            const totalQuarentena3Dias = (occurrences.find(o => o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA'))?.count) || 0;
+            const totalQuarentena3Dias = (occurrences.find(o => o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA'))?.count) || stats.total_quarantine_sms || 0;
 
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const conversaoRate = totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0;
@@ -663,6 +700,8 @@ export default function App() {
               ...(officialSMS3Dias > 0 ? [{ name: '🟡 SMS ENVIADO 3 DIAS', value: officialSMS3Dias, color: '#F59E0B' }] : [])
             ];
 
+            const todayIso = new Date().toISOString().split('T')[0];
+
             return (
               <div className="max-w-[1720px] mx-auto space-y-6">
                 {/* 1. Header & Filtros Compactos Modernos */}
@@ -686,7 +725,7 @@ export default function App() {
 
                   {/* Barra de Filtros Compacta */}
                   <div className="flex flex-wrap items-center gap-3">
-                    {/* Campanhas e Filas */}
+                    {/* Filtro de Campanha */}
                     <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
                       <span className="text-xs font-medium text-slate-500">Campanha:</span>
                       <select 
@@ -695,13 +734,62 @@ export default function App() {
                           const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
                           handleCampaignSelect(val);
                         }}
-                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer max-w-[220px]"
+                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer max-w-[200px]"
                       >
                         <option value="all">Todas as Campanhas</option>
                         {campaigns.map(c => (
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Filtro de Data do Dia */}
+                    <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
+                      <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                        <Calendar size={13} className="text-slate-400" /> Data:
+                      </span>
+                      <select 
+                        value={selectedDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedDate(val);
+                          fetchStats(selectedCampaignId, val);
+                          fetchOccurrences(selectedCampaignId, val);
+                          fetchHourlyStats(selectedCampaignId, startHour, endHour, val);
+                        }}
+                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                      >
+                        <option value="all">📅 Todos os Dias (Acumulado)</option>
+                        <option value={todayIso}>
+                          ⚡ Hoje ({new Date().toLocaleDateString('pt-BR')})
+                        </option>
+                        {availableDates
+                          .filter(d => d.date_str !== todayIso)
+                          .map(d => {
+                            const [year, month, day] = d.date_str.split('-');
+                            const formatted = `${day}/${month}/${year}`;
+                            return (
+                              <option key={d.date_str} value={d.date_str}>
+                                📅 {formatted} ({d.total_processed} discagens)
+                              </option>
+                            );
+                          })}
+                      </select>
+
+                      {/* Date Picker Nativo */}
+                      <input 
+                        type="date"
+                        value={selectedDate === 'all' ? '' : selectedDate}
+                        onChange={(e) => {
+                          const val = e.target.value || 'all';
+                          setSelectedDate(val);
+                          fetchStats(selectedCampaignId, val);
+                          fetchOccurrences(selectedCampaignId, val);
+                          fetchHourlyStats(selectedCampaignId, startHour, endHour, val);
+                        }}
+                        className="text-[11px] font-medium text-slate-600 bg-white border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer"
+                        title="Escolher data específica no calendário"
+                      />
                     </div>
 
                     {/* Filtro de Horas */}
@@ -744,7 +832,9 @@ export default function App() {
 
                     {/* Badge Discados (Compact SaaS Style) */}
                     <div className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-3 shadow-xs">
-                      <span className="text-xs font-medium text-slate-300">Discados</span>
+                      <span className="text-xs font-medium text-slate-300">
+                        {isDateFiltered ? `Discados (${formattedDateLabel})` : 'Discados'}
+                      </span>
                       <span className="text-sm font-semibold tabular-nums tracking-tight">{totalDiscados.toLocaleString('pt-BR')}</span>
                     </div>
                   </div>
@@ -755,7 +845,7 @@ export default function App() {
                   <ModernKPICard 
                     title="1. Base de Leads"
                     value={totalLeadsBase.toLocaleString('pt-BR')}
-                    subtitle="Total de leads carregados na plataforma"
+                    subtitle={isDateFiltered ? "Total de leads carregados na plataforma" : "Total de leads carregados na plataforma"}
                     progress={100}
                     colorTheme="slate"
                     indicatorText="Base Total"
@@ -763,15 +853,15 @@ export default function App() {
                   <ModernKPICard 
                     title="2. Volume Discado"
                     value={totalDiscados.toLocaleString('pt-BR')}
-                    subtitle={`${(totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100).toFixed(1).replace('.', ',')}% da base discada`}
+                    subtitle={isDateFiltered ? `Discagens realizadas em ${formattedDateLabel}` : `${(totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100).toFixed(1).replace('.', ',')}% da base discada`}
                     progress={totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) * 100 : 100}
                     colorTheme="cyan"
-                    indicatorText="Discagens"
+                    indicatorText={isDateFiltered ? "No Dia" : "Discagens"}
                   />
                   <ModernKPICard 
                     title="3. Taxa de Alô (Hit)"
                     value={`${hitRate.toFixed(2).replace('.', ',')}%`}
-                    subtitle={`${totalAtendidas.toLocaleString('pt-BR')} conexões atendidas`}
+                    subtitle={isDateFiltered ? `${totalAtendidas.toLocaleString('pt-BR')} conexões em ${formattedDateLabel}` : `${totalAtendidas.toLocaleString('pt-BR')} conexões atendidas`}
                     progress={hitRate}
                     colorTheme="indigo"
                     indicatorText="Alô / Atendeu"
@@ -779,7 +869,7 @@ export default function App() {
                   <ModernKPICard 
                     title="4. SMS Enviados"
                     value={totalSms.toLocaleString('pt-BR')}
-                    subtitle={`${conversaoAloRate.toFixed(1).replace('.', ',')}% das ligações atendidas`}
+                    subtitle={isDateFiltered ? `${conversaoAloRate.toFixed(1).replace('.', ',')}% das conexões de ${formattedDateLabel}` : `${conversaoAloRate.toFixed(1).replace('.', ',')}% das ligações atendidas`}
                     progress={Math.min(100, conversaoRate * 5)}
                     colorTheme="emerald"
                     indicatorText="Linha Digitável"
@@ -787,7 +877,7 @@ export default function App() {
                   <ModernKPICard 
                     title="Spins (Giros da Base)"
                     value={`${formattedSpins} Giros`}
-                    subtitle={`${activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) completo(s)` : 'Giro em andamento'}`}
+                    subtitle={isDateFiltered ? "Progresso acumulado da base" : (activeSpins >= 1 ? `${Math.floor(activeSpins)} giro(s) completo(s)` : 'Giro em andamento')}
                     progress={Math.min(100, (activeSpins % 1) * 100 || (activeSpins > 0 ? 100 : 0))}
                     colorTheme="cyan"
                     indicatorText="Giros Concluídos"

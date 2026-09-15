@@ -167,10 +167,10 @@ app.get('/api/dashboard/stats', (req, res) => {
 });
 
 /**
- * Rota para obter o resumo de ocorrências agrupadas para a dashboard
+ * Rota para obter o resumo de ocorrências agrupadas para a dashboard (com suporte a data)
  */
 app.get('/api/dashboard/occurrences', (req, res) => {
-  const { campaignId } = req.query;
+  const { campaignId, date } = req.query;
   try {
     let query = `
       SELECT occurrence, COUNT(id) as count
@@ -182,10 +182,42 @@ app.get('/api/dashboard/occurrences', (req, res) => {
       query += ' AND campaign_id = ?';
       params.push(campaignId);
     }
+    if (date && date !== 'all') {
+      query += " AND date(datetime(updated_at, '-3 hours')) = date(?)";
+      params.push(date);
+    }
     query += ' GROUP BY occurrence ORDER BY count DESC';
 
     const occurrences = all(query, params);
     res.json(occurrences);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Rota para listar todas as datas que possuem operações registradas
+ */
+app.get('/api/dashboard/available-dates', (req, res) => {
+  const { campaignId } = req.query;
+  try {
+    let query = `
+      SELECT 
+        date(datetime(updated_at, '-3 hours')) as date_str,
+        COUNT(id) as total_processed,
+        SUM(CASE WHEN call_status = 'completed' OR (occurrence LIKE 'ATENDEU%' AND occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as successful_calls,
+        SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms
+      FROM leads
+      WHERE updated_at IS NOT NULL AND call_status IN ('completed', 'failed')
+    `;
+    const params = [];
+    if (campaignId && campaignId !== 'all') {
+      query += ' AND campaign_id = ?';
+      params.push(campaignId);
+    }
+    query += ` GROUP BY date_str ORDER BY date_str DESC`;
+    const rows = all(query, params);
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
