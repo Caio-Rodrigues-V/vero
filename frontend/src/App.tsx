@@ -71,6 +71,7 @@ interface Lead {
 interface DashboardStats {
   total_campaigns: number;
   total_leads: number;
+  total_unique_leads?: number;
   total_processed: number;
   total_successful_calls: number;
   total_failed_calls: number;
@@ -635,7 +636,7 @@ export default function App() {
                   : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0));
 
             const totalLeadsBase = isDateFiltered
-              ? (stats.total_leads || (isSpecificCampaign ? (activeCampaign ? activeCampaign.total_leads : 0) : totalDiscados))
+              ? (stats.total_unique_leads || (stats.total_leads > 0 && stats.total_leads <= totalDiscados ? stats.total_leads : 0) || (isSpecificCampaign && activeCampaign ? activeCampaign.total_leads : 0) || (totalDiscados > 0 ? Math.round(totalDiscados / 3) : 0))
               : (isSpecificCampaign
                   ? (activeCampaign ? activeCampaign.total_leads : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0));
