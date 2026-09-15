@@ -628,42 +628,70 @@ export default function App() {
               ? selectedDate.split('-').reverse().join('/')
               : 'Acumulado Geral';
 
-            // Totais Consolidados (Adaptam-se automaticamente ao filtro de Data e Campanha)
+            // Identificação das campanhas pertencentes ao dia selecionado pelo nome (DD/MM/YYYY ou DD/MM)
+            let dayCampaigns: Campaign[] = [];
+            if (isDateFiltered) {
+              const [y, m, d] = selectedDate.split('-');
+              const datePtBr = `${d}/${m}/${y}`;
+              const datePtBrShort = `${d}/${m}`;
+              dayCampaigns = campaigns.filter(c => 
+                c.name.includes(datePtBr) || c.name.includes(datePtBrShort)
+              );
+            }
+
+            // 1. Volume Discado (Tentativas de todas as campanhas do dia)
             const totalDiscados = isDateFiltered
-              ? (stats.total_processed || 0)
+              ? (stats.total_processed || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) : 0))
               : (isSpecificCampaign
                   ? (activeCampaign ? activeCampaign.processed_leads : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0));
 
-            const totalLeadsBase = isDateFiltered
-              ? (stats.total_unique_leads || (stats.total_leads > 0 && stats.total_leads <= totalDiscados ? stats.total_leads : 0) || (isSpecificCampaign && activeCampaign ? activeCampaign.total_leads : 0) || (totalDiscados > 0 ? Math.round(totalDiscados / 3) : 0))
-              : (isSpecificCampaign
-                  ? (activeCampaign ? activeCampaign.total_leads : 0)
+            // 2. Base Real de Leads (Tamanho da lista única de clientes carregados)
+            const totalLeadsBase = isSpecificCampaign
+              ? (activeCampaign ? activeCampaign.total_leads : 0)
+              : (isDateFiltered
+                  ? (
+                      (dayCampaigns.length > 0 && dayCampaigns[0].total_leads > 0 ? dayCampaigns[0].total_leads : 0) ||
+                      stats.total_unique_leads ||
+                      (dayCampaigns.length > 0 && totalDiscados > 0 ? Math.round(totalDiscados / dayCampaigns.length) : 0) ||
+                      stats.total_leads ||
+                      totalDiscados
+                    )
                   : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0));
 
+            // 3. Conexões Atendidas (Alô)
             const totalAtendidas = isDateFiltered
-              ? (stats.total_successful_calls || 0)
+              ? (stats.total_successful_calls || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) : 0))
               : (isSpecificCampaign
                   ? (activeCampaign ? activeCampaign.successful_calls : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) || stats.total_successful_calls || 0));
 
+            // 4. Não Atendidas
             const totalNaoAtendidas = isDateFiltered
-              ? (stats.total_failed_calls || 0)
+              ? (stats.total_failed_calls || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) : 0))
               : (isSpecificCampaign
                   ? (activeCampaign ? activeCampaign.failed_calls : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) || stats.total_failed_calls || 0));
 
+            // 5. SMS Enviados
             const totalSms = isDateFiltered
-              ? (stats.total_successful_sms || 0)
+              ? (stats.total_successful_sms || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) : 0))
               : (isSpecificCampaign
                   ? (activeCampaign ? activeCampaign.successful_sms : 0)
                   : (campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) || stats.total_successful_sms || 0));
 
-            // Cálculo dos Spins (Giros da Base):
-            // Proporção real entre o volume discado e a base de leads da operação
-            const activeSpins = totalLeadsBase > 0 
-              ? (totalDiscados / totalLeadsBase) 
-              : (totalDiscados > 0 ? 1.0 : 0);
+            // 6. Cálculo dos Spins (Giros da Base): Discagens do dia / Base de Leads
+            const activeSpins = isDateFiltered
+              ? (
+                  totalLeadsBase > 0
+                    ? (totalDiscados / totalLeadsBase)
+                    : (dayCampaigns.length > 0 ? dayCampaigns.length : 1.0)
+                )
+              : (
+                  isSpecificCampaign
+                    ? (activeCampaign && activeCampaign.total_leads > 0 ? (activeCampaign.processed_leads / activeCampaign.total_leads) : 1.0)
+                    : (totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) : 1.0)
+                );
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
