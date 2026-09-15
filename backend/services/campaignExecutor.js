@@ -144,12 +144,15 @@ async function processCampaign(campaignId, force = false) {
           [lead.id]
         );
 
-        // 5. Disparar a chamada para a VAPI ou RETELL AI (Lazy-load para proteger a VAPI)
+        // 5. Disparar a chamada para DIAL DDM, RETELL AI ou VAPI (Lazy-load para proteger instâncias)
         try {
           let callResult;
           if (provider === 'retell') {
             const { makeRetellCall } = require('./retell.js');
             callResult = await makeRetellCall(lead);
+          } else if (provider === 'dialddm') {
+            const { makeDialDdmCall } = require('./dialddm.js');
+            callResult = await makeDialDdmCall(lead);
           } else {
             callResult = await makeVapiCall(lead);
           }

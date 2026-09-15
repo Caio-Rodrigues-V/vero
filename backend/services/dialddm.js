@@ -1,0 +1,319 @@
+const dotenv = require('dotenv');
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config();
+
+const { get, run } = require('../db.js');
+const { FIRST_MESSAGE_TEMPLATE } = require('../config/agentPrompt.js');
+
+/**
+ * Converte valor float em BRL para extenso em Português
+ */
+function numberToWordsBRL(amount) {
+  const units = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove"];
+  const teens = ["dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+  const tens = ["", "dez", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+  const hundreds = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+
+  function convertGroup(n) {
+    if (n === 100) return "cem";
+    let words = [];
+    const h = Math.floor(n / 100);
+    const t = Math.floor((n % 100) / 10);
+    const u = n % 10;
+
+    if (h > 0) words.push(hundreds[h]);
+    if (t === 1) {
+      words.push(teens[u]);
+    } else {
+      if (t > 0) words.push(tens[t]);
+      if (u > 0) words.push(units[u]);
+    }
+    return words.filter(Boolean).join(" e ");
+  }
+
+  const parts = parseFloat(amount).toFixed(2).split(".");
+  const reais = parseInt(parts[0], 10);
+  const centavos = parseInt(parts[1], 10);
+
+  let reaisStr = "";
+  if (reais === 0) {
+    reaisStr = "zero reais";
+  } else if (reais === 1) {
+    reaisStr = "um real";
+  } else {
+    const thousands = Math.floor(reais / 1000);
+    const remainder = reais % 1000;
+    let partsStr = [];
+    if (thousands > 0) {
+      partsStr.push(thousands === 1 ? "mil" : convertGroup(thousands) + " mil");
+    }
+    if (remainder > 0) {
+      partsStr.push(convertGroup(remainder));
+    }
+    reaisStr = partsStr.join(" e ") + " reais";
+  }
+
+  let centavosStr = "";
+  if (centavos > 0) {
+    if (centavos === 1) {
+      centavosStr = "um centavo";
+    } else {
+      centavosStr = convertGroup(centavos) + " centavos";
+    }
+  }
+
+  if (reaisStr && centavosStr) {
+    return `${reaisStr} e ${centavosStr}`;
+  }
+  return reaisStr || centavosStr;
+}
+
+/**
+ * Converte dias de atraso para extenso
+ */
+function daysToWords(days) {
+  const units = ["zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove"];
+  const teens = ["dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+  const tens = ["", "dez", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+  const hundreds = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+
+  function convertGroup(n) {
+    if (n === 100) return "cem";
+    let words = [];
+    const h = Math.floor(n / 100);
+    const t = Math.floor((n % 100) / 10);
+    const u = n % 10;
+
+    if (h > 0) words.push(hundreds[h]);
+    if (t === 1) {
+      words.push(teens[u]);
+    } else {
+      if (t > 0) words.push(tens[t]);
+      if (u > 0) words.push(units[u]);
+    }
+    return words.filter(Boolean).join(" e ");
+  }
+
+  if (days <= 9) return units[days];
+  return convertGroup(days);
+}
+
+/**
+ * Normaliza o telefone para formato E.164 (+55...)
+ */
+function formatE164(phone) {
+  let cleaned = String(phone).replace(/\D/g, '');
+  if (!cleaned.startsWith('55') && cleaned.length >= 10) {
+    cleaned = '55' + cleaned;
+  }
+  return '+' + cleaned;
+}
+
+/**
+ * Dispara uma chamada telefônica de voz com IA pelo Dialog DDM Gateway
+ *
+ * @param {object} lead - O lead contendo telefone, nome, valor e vencimento
+ * @returns {Promise<{success: boolean, log: string, callId?: string}>}
+ */
+async function makeDialDdmCall(lead) {
+  const baseUrl = (process.env.DIALDDM_BASE_URL || process.env.VAPI_BASE_URL || 'https://dialddm.grupoddm.ia.br/v1').replace(/\/+$/, '');
+  const apiKey = process.env.DIALDDM_API_KEY || process.env.VAPI_API_KEY || 'dialddm_live_key';
+  const defaultAssistantId = process.env.DIALDDM_DEFAULT_ASSISTANT_ID || process.env.DEFAULT_ASSISTANT_ID || '5';
+  const defaultPhoneNumberId = process.env.DIALDDM_PHONE_NUMBER_ID || 'oktor_sip_500ch';
+  const maxConcurrency = parseInt(process.env.DIALDDM_MAX_CONCURRENCY || '50', 10);
+
+  // Buscar configurações da campanha
+  let campaignAssistantId = null;
+  let campaignPhoneNumberId = null;
+  try {
+    const campaign = get('SELECT vapi_assistant_id, vapi_phone_number_id FROM campaigns WHERE id = ?', [lead.campaign_id]);
+    campaignAssistantId = campaign?.vapi_assistant_id;
+    campaignPhoneNumberId = campaign?.vapi_phone_number_id;
+  } catch (err) {
+    console.error('[DIAL DDM] Erro ao consultar campanha no banco:', err.message);
+  }
+
+  const finalAssistantId = campaignAssistantId || defaultAssistantId;
+  const finalPhoneNumberId = campaignPhoneNumberId || defaultPhoneNumberId;
+
+  // Modo de teste opcional
+  const targetPhone = process.env.TEST_PHONE || lead.phone;
+  if (process.env.TEST_PHONE) {
+    console.log(`[DIAL DDM - MODO TESTE] Redirecionando chamada do Lead #${lead.id} (${lead.phone}) para o número de teste: ${targetPhone}`);
+  }
+
+  const phoneE164 = formatE164(targetPhone);
+  const valorFaturaText = numberToWordsBRL(lead.debt_value || 0);
+  const diasAtrasoText = daysToWords(lead.dias_atraso || 0) + ' dias';
+  const statusInternetText = lead.status_internet || '';
+
+  // Calcular número de faturas do lead
+  let numeroFaturas = 1;
+  try {
+    const countResult = get('SELECT COUNT(id) as count FROM leads WHERE campaign_id = ? AND phone = ?', [lead.campaign_id, lead.phone]);
+    if (countResult && countResult.count > 0) {
+      numeroFaturas = countResult.count;
+    }
+  } catch (e) {}
+
+  const faturasWords = ["zero", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  const faturasText = numeroFaturas <= 10 ? faturasWords[numeroFaturas] : String(numeroFaturas);
+
+  // Extrair nome amigável
+  const rawName = (lead.name || '')
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/TESTE PROD/gi, '')
+    .trim() || lead.name || 'Cliente';
+
+  const words = rawName.split(/\s+/).filter(Boolean);
+  const preps = ['de', 'da', 'do', 'dos', 'das'];
+  let wordCount = 2;
+  if (words.length > 2 && preps.includes(words[1].toLowerCase())) {
+    wordCount = 3;
+  }
+  const selectedWords = words.slice(0, Math.min(wordCount, words.length));
+  const shortName = selectedWords.map((w, idx) => {
+    const lower = w.toLowerCase();
+    if (idx > 0 && preps.includes(lower)) return lower;
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  }).join(' ') || 'Cliente';
+
+  const appBaseUrl = process.env.APP_BASE_URL || 'https://verolembrete.grupoddm.ia.br';
+  const webhookUrl = `${appBaseUrl}/api/vapi-webhook`;
+
+  const payload = {
+    assistantId: String(finalAssistantId),
+    phoneNumberId: String(finalPhoneNumberId),
+    customer: {
+      number: phoneE164,
+      name: shortName
+    },
+    metadata: {
+      lead_id: lead.id,
+      campaign_id: lead.campaign_id
+    },
+    serverUrl: webhookUrl,
+    maxConcurrency: maxConcurrency,
+    assistantOverrides: {
+      firstMessage: `Olá, eu falo com ${shortName}, correto?`,
+      variableValues: {
+        NOME_DEV: shortName,
+        nome_cliente: shortName,
+        VAL_NOMINAL: valorFaturaText,
+        valor_fatura: valorFaturaText,
+        dias_atraso: diasAtrasoText,
+        status_internet: statusInternetText,
+        numero_faturas: faturasText
+      }
+    }
+  };
+
+  try {
+    console.log(`[DIAL DDM] Disparando chamada para ${phoneE164} | AssistantId: ${finalAssistantId} | PhoneNumberId: ${finalPhoneNumberId}`);
+
+    const callUrl = `${baseUrl}/call/phone`;
+    const response = await fetch(callUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'X-Max-Concurrency': String(maxConcurrency)
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      data = { message: responseText };
+    }
+
+    if (!response.ok || (!data.id && !data.callId)) {
+      const errMsg = data.message || data.error || responseText || `HTTP ${response.status}`;
+      console.error(`[DIAL DDM ERROR] Resposta de erro para Lead #${lead.id}: ${errMsg}`);
+      return {
+        success: false,
+        log: `Erro Dialog DDM (${errMsg})`
+      };
+    }
+
+    const callId = data.id || data.callId;
+    console.log(`[DIAL DDM SUCCESS] Chamada criada com sucesso para Lead #${lead.id}. Call ID: ${callId}`);
+
+    // Salvar call_id no banco
+    run(
+      `UPDATE leads SET call_id = ?, call_status = 'calling', call_log = 'Chamada originada via Dialog DDM', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [callId, lead.id]
+    );
+
+    return {
+      success: true,
+      callId,
+      log: `Chamada originada com sucesso via Dialog DDM. ID: ${callId}`
+    };
+  } catch (error) {
+    console.error(`[DIAL DDM EXCEPTION] Falha de conexão ao discar Lead #${lead.id}:`, error.message);
+    return {
+      success: false,
+      log: `Exceção de rede Dialog DDM: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Consulta a telemetria de concorrência e capacidade de canais do Dialog DDM
+ */
+async function getDialDdmConcurrency() {
+  const baseUrl = (process.env.DIALDDM_BASE_URL || process.env.VAPI_BASE_URL || 'https://dialddm.grupoddm.ia.br/v1').replace(/\/+$/, '');
+  const apiKey = process.env.DIALDDM_API_KEY || process.env.VAPI_API_KEY || 'dialddm_live_key';
+
+  try {
+    const res = await fetch(`${baseUrl}/concurrency`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.error('[DIAL DDM CONCURRENCY ERROR]', err.message);
+    return {
+      provider: 'Dialog DDM Voice AI',
+      active_channels: 0,
+      max_channels: 500,
+      available_channels: 500,
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Recupera histórico e áudio gravado de uma chamada
+ */
+async function getDialDdmTranscript(callId) {
+  const baseUrl = (process.env.DIALDDM_BASE_URL || process.env.VAPI_BASE_URL || 'https://dialddm.grupoddm.ia.br/v1').replace(/\/+$/, '');
+  const apiKey = process.env.DIALDDM_API_KEY || process.env.VAPI_API_KEY || 'dialddm_live_key';
+
+  try {
+    const res = await fetch(`${baseUrl}/call/${callId}/transcript`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.error(`[DIAL DDM TRANSCRIPT ERROR] Call #${callId}:`, err.message);
+    return null;
+  }
+}
+
+module.exports = {
+  makeDialDdmCall,
+  getDialDdmConcurrency,
+  getDialDdmTranscript
+};

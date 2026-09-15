@@ -1329,6 +1329,19 @@ app.all('/api/tools/resend-answered-sms', async (req, res) => {
 });
 
 /**
+ * Consulta em tempo real a capacidade e concorrência dos 500 canais do Dialog DDM
+ */
+app.get('/api/tools/dialddm-concurrency', async (req, res) => {
+  try {
+    const { getDialDdmConcurrency } = require('./services/dialddm.js');
+    const data = await getDialDdmConcurrency();
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * Endpoint de callback para o n8n atualizar o status do lead
  */
 app.post('/api/leads/update', (req, res) => {
@@ -1348,10 +1361,10 @@ app.post('/api/leads/update', (req, res) => {
 
     // Valores novos ou mantidos
     const newCallStatus = call_status || lead.call_status;
-    const newCallLog = call_log !== undefined ? call_log : lead.call_log;
+    const newCallLog = call_log || lead.call_log;
     const newSmsStatus = sms_status || lead.sms_status;
-    const newSmsLog = sms_log !== undefined ? sms_log : lead.sms_log;
-    const newOccurrence = occurrence !== undefined ? occurrence : lead.occurrence;
+    const newSmsLog = sms_log || lead.sms_log;
+    const newOccurrence = occurrence || lead.occurrence;
 
     run(
       `UPDATE leads 
@@ -1360,12 +1373,11 @@ app.post('/api/leads/update', (req, res) => {
       [newCallStatus, newCallLog, newSmsStatus, newSmsLog, newOccurrence, lead_id]
     );
 
-    // Recalcular as estatísticas totais da campanha no banco usando a função centralizada
     updateCampaignStats(campaignId);
 
-    res.json({ success: true, message: 'Status do lead atualizado e métricas recalculadas.' });
+    res.json({ success: true, message: 'Status do lead atualizado com sucesso.' });
   } catch (error) {
-    console.error('[UPDATE LEAD ERROR]', error);
+    console.error('[SERVER LEADS UPDATE ERROR]', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1388,7 +1400,7 @@ app.post('/api/retell-webhook', async (req, res) => {
 });
 
 /**
- * Endpoint de webhook para receber relatórios da VAPI.ai
+ * Endpoint de webhook para receber relatórios da VAPI.ai e do Dialog DDM Voice AI
  */
 app.post('/api/vapi-webhook', async (req, res) => {
   try {
@@ -1441,47 +1453,48 @@ app.post('/api/vapi-webhook', async (req, res) => {
       });
     }
 
-    if (!message || message.type !== 'end-of-call-report') {
+    if (!message || (message.type !== 'end-of-call-report' && message.status !== 'ended')) {
       return res.status(200).json({});
     }
 
-    const call = message.call;
-    const metadata = call?.metadata;
-    let leadId = metadata?.lead_id;
+    const call = message.call || {};
+    const metadata = call?.metadata || message?.metadata;
+    let leadId = metadata?.lead_id || message?.customer?.metadata?.lead_id;
     let targetLead = null;
 
     if (leadId) {
       targetLead = get('SELECT * FROM leads WHERE id = ?', [leadId]);
     }
 
-    if (!targetLead && call?.id) {
-      targetLead = get('SELECT * FROM leads WHERE call_id = ?', [call.id]);
+    if (!targetLead && (call?.id || message?.id)) {
+      targetLead = get('SELECT * FROM leads WHERE call_id = ?', [call?.id || message?.id]);
     }
 
-    if (!targetLead && call?.customer?.number) {
-      const phoneDigits = call.customer.number.replace(/\D/g, '').slice(-8);
+    if (!targetLead && (call?.customer?.number || message?.customer?.number)) {
+      const targetNum = call?.customer?.number || message?.customer?.number;
+      const phoneDigits = targetNum.replace(/\D/g, '').slice(-8);
       targetLead = get('SELECT * FROM leads WHERE phone LIKE ? ORDER BY id DESC LIMIT 1', [`%${phoneDigits}%`]);
     }
 
     if (!targetLead) {
-      console.log(`[VAPI WEBHOOK] Lead não encontrado no banco para a chamada ${call?.id} (${call?.customer?.number}).`);
+      console.log(`[VOICE WEBHOOK] Lead não encontrado no banco para a chamada ${call?.id || message?.id} (${call?.customer?.number || message?.customer?.number}).`);
       return res.json({ received: true, status: 'lead_not_found' });
     }
 
     leadId = targetLead.id;
     const campaignId = targetLead.campaign_id || metadata?.campaign_id;
 
-    const endedReason = getVapiEndedReason(call, message);
+    const endedReason = getVapiEndedReason(call, message) || message?.endedReason || 'customer-ended-call';
 
-    console.log(`[VAPI WEBHOOK] Recebido fim de chamada para o Lead #${leadId} (Campanha #${campaignId}). Motivo: ${endedReason}`);
+    console.log(`[VOICE WEBHOOK] Recebido fim de chamada para o Lead #${leadId} (Campanha #${campaignId}). Motivo: ${endedReason}`);
 
-    // Regra: classificar como atendida somente quando a Vapi indicar chamada conectada.
+    // Regra: classificar como atendida somente quando a ligação for conectada/completada
     const duration = getVapiDurationSeconds({
       ...(call || {}),
-      duration: call?.duration || message?.duration,
+      duration: call?.duration || message?.duration || message?.durationSeconds || message?.duration_seconds,
       startedAt: call?.startedAt || message?.startedAt,
       endedAt: call?.endedAt || message?.endedAt
-    });
+    }) || message?.durationSeconds || message?.duration_seconds || 0;
 
     let transcriptText = 
       message?.transcript || 
@@ -1508,16 +1521,21 @@ app.post('/api/vapi-webhook', async (req, res) => {
       call?.artifact?.recordingUrl || 
       null;
 
-    const isSuccess = isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration);
+    const tabulation = message?.analysis?.tabulation || call?.analysis?.tabulation || message?.tabulation || call?.tabulation;
+    const tabulationCode = message?.analysis?.tabulation_code || call?.analysis?.tabulation_code || message?.tabulation_code || call?.tabulation_code;
+
+    const isSuccess = isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration) || tabulationCode === 'HUMAN_COMPLETED' || tabulation === 'PROMESSA_DE_PAGAMENTO' || duration > 3;
     const callStatus = isSuccess ? 'completed' : 'failed';
-    const logText = `[VAPI] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Resumo: ${call?.summary || 'Sem resumo fornecido.'}`;
+    const logText = `[VOICE] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Tabulação: ${tabulation || 'N/A'}`;
     
     // Classificar ocorrência
     const occurrence = classifyCallOccurrence({
-      endedReason: call?.endedReason || call?.ended_reason,
-      summary: call?.summary,
+      endedReason: endedReason,
+      summary: message?.analysis?.summary || call?.summary || message?.summary,
       transcript: transcriptText,
-      duration: duration
+      duration: duration,
+      tabulation,
+      tabulationCode
     });
 
     // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
