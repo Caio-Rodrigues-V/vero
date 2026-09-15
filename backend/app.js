@@ -31,19 +31,20 @@ app.use(express.json());
 
 // Endpoint de diagnóstico do sistema
 app.get('/api/system-info', (req, res) => {
-  const configuredDialerProvider = (process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
-  const defaultUploadDialerProvider = (process.env.DEFAULT_UPLOAD_DIALER_PROVIDER || 'vapi').toLowerCase() === 'retell' ? 'retell' : 'vapi';
+  const configuredDialerProvider = (process.env.DIALER_PROVIDER || 'dialddm').toLowerCase();
+  const defaultUploadDialerProvider = (process.env.DEFAULT_UPLOAD_DIALER_PROVIDER || configuredDialerProvider || 'dialddm').toLowerCase();
   res.json({
     domain: 'verolembrete.grupoddm.ia.br',
     serverIp: '129.121.42.250',
     dialerProvider: defaultUploadDialerProvider,
     defaultUploadDialerProvider,
     configuredDialerProvider,
-    providerName: defaultUploadDialerProvider === 'retell' ? 'Retell AI' : 'VAPI.ai',
+    providerName: defaultUploadDialerProvider === 'dialddm' ? 'Dialog DDM Voice AI' : (defaultUploadDialerProvider === 'retell' ? 'Retell AI' : 'VAPI.ai'),
     cwd: process.cwd(),
     dirname: __dirname,
     nodeVersion: process.version,
     uptimeSeconds: process.uptime(),
+    dialddmAssistantId: process.env.DIALDDM_DEFAULT_ASSISTANT_ID || '5',
     vapiAssistantId: process.env.VAPI_ASSISTANT_ID,
     vapiPhoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
     retellAgentId: process.env.RETELL_AGENT_ID,
@@ -1093,8 +1094,16 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     }
 
     const { dialerProvider, vapiAssistantId, vapiPhoneNumberId } = req.body;
-    const requestedProvider = String(dialerProvider || 'vapi').toLowerCase();
-    const provider = requestedProvider === 'retell' ? 'retell' : 'vapi';
+    const requestedProvider = String(dialerProvider || '').toLowerCase();
+    const provider = requestedProvider === 'retell'
+      ? 'retell'
+      : (requestedProvider === 'dialddm'
+        ? 'dialddm'
+        : (requestedProvider === 'vapi' ? 'vapi' : (process.env.DIALER_PROVIDER || 'dialddm').toLowerCase()));
+
+    const defaultConcurr = provider === 'dialddm'
+      ? parseInt(process.env.DIALDDM_MAX_CONCURRENCY || process.env.MAX_CONCURRENT_CALLS || '500', 10)
+      : parseInt(process.env.MAX_CONCURRENT_CALLS || '14', 10);
 
     const activeCampaign = get(
       `SELECT id, name
@@ -1113,7 +1122,7 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     // 2. Inserir campanha no banco (status inicial como 'processing' para iniciar disparos imediatamente)
     const campaignResult = run(
       'INSERT INTO campaigns (name, status, dialer_provider, vapi_assistant_id, vapi_phone_number_id, concurrency_limit, total_leads) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [campaignName.trim(), 'processing', provider, vapiAssistantId || null, vapiPhoneNumberId || null, 14, leads.length]
+      [campaignName.trim(), 'processing', provider, vapiAssistantId || null, vapiPhoneNumberId || null, defaultConcurr, leads.length]
     );
     const campaignId = campaignResult.lastInsertRowid;
 

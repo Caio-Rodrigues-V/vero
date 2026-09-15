@@ -474,12 +474,24 @@ export default function App() {
     setUploadError('');
     setUploadSuccess('');
 
+    const effectiveAssistantId = dialerProvider === 'dialddm'
+      ? (selectedVapiAssistantId && ['5', '1'].includes(selectedVapiAssistantId) ? selectedVapiAssistantId : '5')
+      : (dialerProvider === 'retell'
+        ? (selectedVapiAssistantId || (retellAgents[0]?.id || ''))
+        : (selectedVapiAssistantId || (vapiAssistants[0]?.id || '')));
+
+    const effectivePhoneNumberId = dialerProvider === 'dialddm'
+      ? 'oktor_sip_500ch'
+      : (dialerProvider === 'retell'
+        ? (selectedVapiPhoneNumberId || (retellPhoneNumbers[0]?.id || ''))
+        : (selectedVapiPhoneNumberId || (vapiPhoneNumbers[0]?.id || '')));
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('campaignName', campaignName);
     formData.append('dialerProvider', dialerProvider);
-    formData.append('vapiAssistantId', selectedVapiAssistantId);
-    formData.append('vapiPhoneNumberId', selectedVapiPhoneNumberId);
+    formData.append('vapiAssistantId', effectiveAssistantId);
+    formData.append('vapiPhoneNumberId', effectivePhoneNumberId);
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/upload`, {
