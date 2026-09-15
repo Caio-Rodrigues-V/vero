@@ -16,11 +16,15 @@ async function processCampaign(campaignId, force = false) {
   activeJobs.add(campaignId);
 
   const paceDelayMs = parseInt(process.env.WORKER_DELAY_BETWEEN_CALLS_MS || process.env.CALL_PACE_DELAY_MS || '1500', 10);
-  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 500 ? 1500 : paceDelayMs;
-  const batchSizeValue = parseInt(process.env.WORKER_CALL_BATCH_SIZE || process.env.CALL_DISPATCH_BATCH_SIZE || '14', 10);
-  const safeBatchSize = Math.min(isNaN(batchSizeValue) || batchSizeValue <= 0 ? 14 : batchSizeValue, 14);
+  const safePaceDelay = isNaN(paceDelayMs) || paceDelayMs < 100 ? 1500 : paceDelayMs;
+  
+  const envMaxConcurrency = parseInt(process.env.MAX_CONCURRENT_CALLS || process.env.DIALDDM_MAX_CONCURRENCY || '50', 10);
+  const defaultConcurrency = isNaN(envMaxConcurrency) || envMaxConcurrency <= 0 ? 50 : envMaxConcurrency;
 
-  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência: até 14 simultâneas | Lote: até ${safeBatchSize} chamadas | Pace Delay SIP: ${safePaceDelay}ms)`);
+  const batchSizeValue = parseInt(process.env.WORKER_CALL_BATCH_SIZE || process.env.BATCH_SIZE || String(defaultConcurrency), 10);
+  const safeBatchSize = isNaN(batchSizeValue) || batchSizeValue <= 0 ? defaultConcurrency : batchSizeValue;
+
+  console.log(`[EXECUTOR] Iniciando processamento da campanha #${campaignId} (Concorrência Máx: até ${defaultConcurrency} simultâneas | Lote: até ${safeBatchSize} chamadas | Pace Delay SIP: ${safePaceDelay}ms)`);
 
   try {
     while (activeJobs.has(campaignId)) {
@@ -32,7 +36,7 @@ async function processCampaign(campaignId, force = false) {
         break;
       }
 
-      const provider = (campaign.dialer_provider || process.env.DIALER_PROVIDER || 'vapi').toLowerCase();
+      const provider = (campaign.dialer_provider || process.env.DIALER_PROVIDER || 'dialddm').toLowerCase();
 
       // Auto-limpeza de segurança: resetar ou falhar chamadas presas em 'calling'/'in_progress' há mais de 3 minutos
       run(
@@ -42,9 +46,9 @@ async function processCampaign(campaignId, force = false) {
         [campaignId]
       );
 
-      // 2. Verificar limite de chamadas ativas simultâneas
-      const campaignLimit = campaign.concurrency_limit ? parseInt(campaign.concurrency_limit, 10) : 14;
-      const concurrencyLimit = Math.min(isNaN(campaignLimit) || campaignLimit <= 0 ? 14 : campaignLimit, 14);
+      // 2. Verificar limite de chamadas ativas simultâneas (Modular e dinâmico)
+      const campaignLimit = campaign.concurrency_limit ? parseInt(campaign.concurrency_limit, 10) : defaultConcurrency;
+      const concurrencyLimit = isNaN(campaignLimit) || campaignLimit <= 0 ? defaultConcurrency : campaignLimit;
 
       const activeCallsObj = get(
         `SELECT COUNT(*) as count FROM leads WHERE campaign_id = ? AND call_status IN ('calling', 'in_progress')`,
