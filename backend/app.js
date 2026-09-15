@@ -78,6 +78,7 @@ app.get('/api/dashboard/stats', (req, res) => {
     if (date) {
       let query = `
         SELECT 
+          COUNT(DISTINCT phone) as unique_leads,
           COUNT(id) as total_leads,
           SUM(CASE WHEN call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
           SUM(CASE WHEN call_status = 'completed' OR (occurrence LIKE 'ATENDEU%' AND occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
@@ -96,18 +97,17 @@ app.get('/api/dashboard/stats', (req, res) => {
 
       const dayStats = get(query, params) || {};
 
-      // Base de leads das campanhas operadas na data selecionada
-      let dayBase = 0;
+      // Base de leads únicos da operação no dia
+      let dayBase = dayStats.unique_leads || dayStats.total_leads || 0;
       let dayCampaignsCount = 0;
       if (campaignId && campaignId !== 'all') {
         const camp = get('SELECT total_leads FROM campaigns WHERE id = ?', [campaignId]);
-        dayBase = camp ? camp.total_leads : (dayStats.total_leads || 0);
+        dayBase = dayStats.unique_leads || (camp ? camp.total_leads : dayStats.total_leads) || 0;
         dayCampaignsCount = 1;
       } else {
         const activeDayCamps = get(`
           SELECT 
-            COUNT(DISTINCT c.id) as total_campaigns, 
-            SUM(c.total_leads) as total_base 
+            COUNT(DISTINCT c.id) as total_campaigns
           FROM campaigns c
           WHERE c.id IN (
             SELECT DISTINCT campaign_id 
@@ -117,12 +117,12 @@ app.get('/api/dashboard/stats', (req, res) => {
         `, [date]);
 
         dayCampaignsCount = activeDayCamps ? (activeDayCamps.total_campaigns || 0) : 0;
-        dayBase = activeDayCamps && activeDayCamps.total_base ? activeDayCamps.total_base : (dayStats.total_leads || 0);
       }
 
       return res.json({
         total_campaigns: dayCampaignsCount,
         total_leads: dayBase || dayStats.total_processed || 0,
+        total_unique_leads: dayStats.unique_leads || dayBase || 0,
         total_processed: dayStats.total_processed || 0,
         total_successful_calls: dayStats.total_successful_calls || 0,
         total_failed_calls: dayStats.total_failed_calls || 0,
