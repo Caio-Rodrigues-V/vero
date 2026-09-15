@@ -272,8 +272,6 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
-  const [vapiAssistants, setVapiAssistants] = useState<{ id: string, name: string }[]>([]);
-  const [selectedVapiAssistantId, setSelectedVapiAssistantId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Selected Campaign for Leads view (default: 'all')
@@ -296,104 +294,6 @@ export default function App() {
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
 
-  // Dialer Provider (Dialog DDM vs VAPI vs Retell AI)
-  const [dialerProvider, setDialerProvider] = useState<'dialddm' | 'vapi' | 'retell'>('dialddm');
-  const [dialddmAssistants, setDialddmAssistants] = useState<{ id: string; name: string }[]>([]);
-  const [retellAgents, setRetellAgents] = useState<{ id: string; name: string }[]>([]);
-  const [retellPhoneNumbers, setRetellPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
-
-  // Phone Numbers / Troncos SIP VAPI
-  const [vapiPhoneNumbers, setVapiPhoneNumbers] = useState<{ id: string; name: string }[]>([]);
-  const [selectedVapiPhoneNumberId, setSelectedVapiPhoneNumberId] = useState<string>('');
-
-  // Fetch initial data
-  useEffect(() => {
-    fetchStats();
-    fetchCampaigns();
-    fetchDialDdmAssistants();
-    fetchVapiAssistants();
-    fetchVapiPhoneNumbers();
-    fetchRetellAgents();
-    fetchRetellPhoneNumbers();
-    fetchOccurrences('all');
-    fetchHourlyStats('all', 8, 21, selectedDate);
-    fetchLeads('all', 1);
-    fetchSystemInfo();
-  }, []);
-
-  const fetchDialDdmAssistants = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/dialddm/assistants`);
-      if (res.ok) {
-        const data = await res.json();
-        setDialddmAssistants(data);
-        if (data.length > 0) {
-          const vero6 = data.find((a: any) => a.id === '6');
-          if (vero6) {
-            setSelectedVapiAssistantId(vero6.id);
-          } else if (!selectedVapiAssistantId) {
-            setSelectedVapiAssistantId(data[0].id);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching Dialog DDM assistants:', err);
-    }
-  };
-
-  const fetchSystemInfo = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/system-info`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.defaultUploadDialerProvider === 'dialddm' || data.defaultUploadDialerProvider === 'vapi' || data.defaultUploadDialerProvider === 'retell') {
-          setDialerProvider(data.defaultUploadDialerProvider);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching system info:', err);
-    }
-  };
-
-  const fetchRetellAgents = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/retell/agents`);
-      if (res.ok) {
-        const data = await res.json();
-        setRetellAgents(data);
-      }
-    } catch (err) {
-      console.error('Error fetching Retell agents:', err);
-    }
-  };
-
-  const fetchRetellPhoneNumbers = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/retell/phone-numbers`);
-      if (res.ok) {
-        const data = await res.json();
-        setRetellPhoneNumbers(data);
-      }
-    } catch (err) {
-      console.error('Error fetching Retell phone numbers:', err);
-    }
-  };
-
-  const fetchVapiPhoneNumbers = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/vapi/phone-numbers`);
-      if (res.ok) {
-        const data = await res.json();
-        setVapiPhoneNumbers(data);
-        if (data.length > 0 && !selectedVapiPhoneNumberId) {
-          setSelectedVapiPhoneNumberId(data[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching VAPI Phone Numbers:', err);
-    }
-  };
-
   const fetchOccurrences = async (campaignId: number | 'all' = 'all') => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard/occurrences?campaignId=${campaignId}`);
@@ -406,20 +306,14 @@ export default function App() {
     }
   };
 
-  const fetchVapiAssistants = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/vapi/assistants`);
-      if (res.ok) {
-        const data = await res.json();
-        setVapiAssistants(data);
-        if (data.length > 0) {
-          setSelectedVapiAssistantId(data[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching VAPI assistants:', err);
-    }
-  };
+  // Fetch initial data
+  useEffect(() => {
+    fetchStats();
+    fetchCampaigns();
+    fetchOccurrences('all');
+    fetchHourlyStats('all', 8, 21, selectedDate);
+    fetchLeads('all', 1);
+  }, []);
 
   const handleOpenTranscriptModal = (lead: Lead) => {
     setSelectedTranscriptLead(lead);
@@ -568,24 +462,12 @@ export default function App() {
     setUploadError('');
     setUploadSuccess('');
 
-    const effectiveAssistantId = dialerProvider === 'dialddm'
-      ? (selectedVapiAssistantId || (dialddmAssistants.find(a => a.id === '6')?.id || dialddmAssistants[0]?.id || '6'))
-      : (dialerProvider === 'retell'
-        ? (selectedVapiAssistantId || (retellAgents[0]?.id || ''))
-        : (selectedVapiAssistantId || (vapiAssistants[0]?.id || '')));
-
-    const effectivePhoneNumberId = dialerProvider === 'dialddm'
-      ? 'oktor_sip_500ch'
-      : (dialerProvider === 'retell'
-        ? (selectedVapiPhoneNumberId || (retellPhoneNumbers[0]?.id || ''))
-        : (selectedVapiPhoneNumberId || (vapiPhoneNumbers[0]?.id || '')));
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('campaignName', campaignName);
-    formData.append('dialerProvider', dialerProvider);
-    formData.append('vapiAssistantId', effectiveAssistantId);
-    formData.append('vapiPhoneNumberId', effectivePhoneNumberId);
+    formData.append('dialerProvider', 'dialddm');
+    formData.append('vapiAssistantId', '6');
+    formData.append('vapiPhoneNumberId', 'oktor_sip_500ch');
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/campaigns/upload`, {
@@ -1158,80 +1040,37 @@ export default function App() {
                       Plataforma de Discagem
                     </label>
                     <select 
-                      value={dialerProvider} 
-                      onChange={(e) => setDialerProvider(e.target.value as 'dialddm' | 'vapi' | 'retell')}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
+                      value="dialddm" 
+                      disabled
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none font-semibold text-slate-700 cursor-not-allowed"
                     >
                       <option value="dialddm">Dialog DDM (Infra Própria / Oktor 500ch)</option>
-                      <option value="vapi">VAPI.ai (Plataforma VAPI)</option>
-                      <option value="retell">Retell AI (Plataforma Retell)</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Agente de Voz {dialerProvider === 'dialddm' ? 'Dialog DDM' : dialerProvider === 'retell' ? 'Retell AI' : 'VAPI'}
+                      Agente de Voz Dialog DDM
                     </label>
                     <select 
-                      value={selectedVapiAssistantId} 
-                      onChange={(e) => setSelectedVapiAssistantId(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
+                      value="6" 
+                      disabled
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none font-semibold text-slate-700 cursor-not-allowed"
                     >
-                      {dialerProvider === 'dialddm' ? (
-                        dialddmAssistants.length > 0 ? (
-                          dialddmAssistants.map(ast => (
-                            <option key={ast.id} value={ast.id}>
-                              {ast.name}
-                            </option>
-                          ))
-                        ) : (
-                          <>
-                            <option value="6">Assistente #6 - Verô - Cobrança Recente</option>
-                            <option value="5">Assistente #5 - Agente Homologador DDM - Testes 213</option>
-                          </>
-                        )
-                      ) : dialerProvider === 'retell' ? (
-                        retellAgents.map(ast => (
-                          <option key={ast.id} value={ast.id}>
-                            {ast.name}
-                          </option>
-                        ))
-                      ) : (
-                        vapiAssistants.map(ast => (
-                          <option key={ast.id} value={ast.id}>
-                            {ast.name}
-                          </option>
-                        ))
-                      )}
+                      <option value="6">Assistente #6 - Verô - Cobrança Recente</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                      Linha / Tronco Telefônico (BINA {dialerProvider === 'dialddm' ? 'Dialog DDM' : dialerProvider === 'retell' ? 'Retell' : 'VAPI'})
+                      Linha / Tronco Telefônico (BINA Dialog DDM)
                     </label>
                     <select 
-                      value={selectedVapiPhoneNumberId} 
-                      onChange={(e) => setSelectedVapiPhoneNumberId(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:border-vero-magenta font-semibold text-slate-700"
+                      value="oktor_sip_500ch" 
+                      disabled
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none font-semibold text-slate-700 cursor-not-allowed"
                     >
-                      {dialerProvider === 'dialddm' ? (
-                        <>
-                          <option value="oktor_sip_500ch">OKTOR SIP (Tronco 500 Canais Oktor Telecom)</option>
-                        </>
-                      ) : dialerProvider === 'retell' ? (
-                        retellPhoneNumbers.map(pn => (
-                          <option key={pn.id} value={pn.id}>
-                            {pn.name}
-                          </option>
-                        ))
-                      ) : (
-                        vapiPhoneNumbers.map(pn => (
-                          <option key={pn.id} value={pn.id}>
-                            {pn.name}
-                          </option>
-                        ))
-                      )}
+                      <option value="oktor_sip_500ch">OKTOR SIP (Tronco 500 Canais Oktor Telecom)</option>
                     </select>
                   </div>
 
