@@ -96,20 +96,19 @@ async function processCampaign(campaignId, force = false) {
         break;
       }
 
-      const isTestCampaign = campaign && campaign.name && (campaign.name.toLowerCase().includes('teste') || campaign.name.toLowerCase().includes('test'));
-
       await Promise.all(leads.map(async (lead) => {
         // Trava de Quarentena de 3 Dias: Se este número recebeu SMS ou teve CPC nos últimos 3 dias, pula a discagem
-        const cleanPhone = String(lead.phone).replace(/\D/g, '');
+        const cleanDigits = String(lead.phone).replace(/\D/g, '');
+        const phoneSuffix = cleanDigits.length >= 8 ? cleanDigits.slice(-8) : cleanDigits;
 
         const recentContact = get(
           `SELECT id, name, updated_at FROM leads 
-           WHERE (phone = ? OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') = ?)
+           WHERE (phone = ? OR phone LIKE '%' || ? OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') LIKE '%' || ?)
              AND id != ? 
              AND (sms_status = 'completed' OR (call_status = 'completed' AND occurrence IS NOT NULL AND occurrence NOT LIKE 'TENTATIVA - %')) 
              AND updated_at >= datetime('now', '-3 days')
            LIMIT 1`,
-          [lead.phone, cleanPhone, lead.id]
+          [lead.phone, phoneSuffix, phoneSuffix, lead.id]
         );
 
         if (recentContact) {
