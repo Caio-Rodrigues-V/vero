@@ -300,9 +300,9 @@ export default function App() {
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
 
-  const fetchAvailableDates = async (campaignId: number | 'all' = selectedCampaignId) => {
+  const fetchAvailableDates = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dashboard/available-dates?campaignId=${campaignId}`);
+      const res = await fetch(`${BACKEND_URL}/api/dashboard/available-dates`);
       if (res.ok) {
         const data = await res.json();
         setAvailableDates(data);
@@ -331,7 +331,7 @@ export default function App() {
     fetchCampaigns();
     fetchOccurrences(selectedCampaignId, selectedDate);
     fetchHourlyStats(selectedCampaignId, 8, 21, selectedDate);
-    fetchAvailableDates(selectedCampaignId);
+    fetchAvailableDates();
     fetchLeads('all', 1);
   }, []);
 
@@ -373,7 +373,7 @@ export default function App() {
     fetchCampaigns();
     fetchOccurrences(selectedCampaignId, selectedDate);
     fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
-    fetchAvailableDates(selectedCampaignId);
+    fetchAvailableDates();
     if (activeTab === 'leads') {
       fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
     }
@@ -420,7 +420,7 @@ export default function App() {
   const handleSync = async () => {
     fetchStats(selectedCampaignId, selectedDate);
     fetchCampaigns();
-    fetchAvailableDates(selectedCampaignId);
+    fetchAvailableDates();
     try {
       await fetch(`${BACKEND_URL}/api/leads/sync-recordings`, {
         method: 'POST',
@@ -450,11 +450,13 @@ export default function App() {
   const handleCampaignSelect = (id: number | 'all') => {
     setSelectedCampaignId(id);
     setLeadsPage(1);
-    fetchStats(id, selectedDate);
+    const targetDate = id === 'all' ? todayIso : 'all';
+    setSelectedDate(targetDate);
+    fetchStats(id, targetDate);
     fetchLeads(id, 1, statusFilterRef.current, searchTermRef.current);
-    fetchOccurrences(id, selectedDate);
-    fetchHourlyStats(id, startHour, endHour, selectedDate);
-    fetchAvailableDates(id);
+    fetchOccurrences(id, targetDate);
+    fetchHourlyStats(id, startHour, endHour, targetDate);
+    fetchAvailableDates();
   };
 
   const handleDeleteCampaign = async (id: number) => {
