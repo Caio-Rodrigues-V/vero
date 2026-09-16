@@ -1363,20 +1363,46 @@ app.all('/api/tools/audit-today-sms', (req, res) => {
 });
 
 /**
- * Reenvia o SMS de forma garantida para todos os leads que atenderam hoje
+ * Reenvia o SMS de forma garantida para todos os leads que atenderam
+ * (inclui Atendeu e Desligou, Ligação Muda e Diálogo) que ainda não receberam SMS.
  */
 app.all('/api/tools/resend-answered-sms', async (req, res) => {
   try {
-    const answeredLeads = all(`
-      SELECT id, name, phone, debt_value, barcode, campaign_id
+    const campaignId = req.query?.campaignId || req.body?.campaignId || null;
+
+    let query = `
+      SELECT id, name, phone, debt_value, barcode, campaign_id, occurrence, call_status, sms_status
       FROM leads
-      WHERE (occurrence LIKE '%ATENDEU%' OR call_status = 'completed')
-        AND barcode IS NOT NULL
-        AND barcode != ''
-        AND updated_at >= date('now', 'start of day')
-    `);
+      WHERE (
+        occurrence LIKE '%ATENDEU%' 
+        OR occurrence LIKE '%LIGAÇÃO MUDA%' 
+        OR occurrence LIKE '%LIGACAO_MUDA%'
+        OR occurrence LIKE '%PROMESSA%'
+        OR occurrence LIKE '%2ª VIA%'
+        OR occurrence LIKE '%ALEGA%'
+        OR call_status = 'completed'
+        OR (call_duration > 0 AND (occurrence IS NULL OR occurrence NOT LIKE '%CAIXA%'))
+      )
+      AND (sms_status IS NULL OR sms_status != 'completed')
+      AND (occurrence IS NULL OR (occurrence NOT LIKE '%CAIXA%' AND occurrence NOT LIKE '%VOICEMAIL%' AND occurrence NOT LIKE '%NÃO ATENDEU%'))
+    `;
+
+    const params = [];
+    if (campaignId) {
+      query += ` AND campaign_id = ?`;
+      params.push(Number(campaignId));
+    } else {
+      const lastCamp = get('SELECT id FROM campaigns ORDER BY id DESC LIMIT 1');
+      if (lastCamp) {
+        query += ` AND campaign_id = ?`;
+        params.push(lastCamp.id);
+      }
+    }
+
+    const answeredLeads = all(query, params);
 
     const { triggerDdmShortSms } = require('./services/communication.js');
+    const { updateCampaignStats } = require('./services/stats.js');
 
     // Disparar em background
     (async () => {
@@ -1385,22 +1411,31 @@ app.all('/api/tools/resend-answered-sms', async (req, res) => {
       for (const lead of answeredLeads) {
         try {
           const result = await triggerDdmShortSms(lead);
-          if (result.success) {
-            run("UPDATE leads SET sms_status = 'completed', sms_log = ? WHERE id = ?", [result.log, lead.id]);
+          if (result && result.success) {
+            run("UPDATE leads SET sms_status = 'completed', sms_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [result.log, lead.id]);
             sentCount++;
           } else {
+            const errLog = result?.log || 'Falha no envio';
+            run("UPDATE leads SET sms_status = 'failed', sms_log = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [errLog, lead.id]);
             failedCount++;
           }
-          await new Promise(r => setTimeout(r, 100)); // 10 envios por segundo
+          await new Promise(r => setTimeout(r, 150));
         } catch (e) {}
       }
       console.log(`[RESEND AUDIT] Finalizado reenvio de ${sentCount} SMS com sucesso (${failedCount} falhas).`);
+      if (answeredLeads.length > 0) {
+        const campaignIds = [...new Set(answeredLeads.map(l => l.campaign_id))];
+        campaignIds.forEach(id => {
+          try { updateCampaignStats(id); } catch (e) {}
+        });
+      }
     })();
 
     res.json({
       success: true,
-      message: `Iniciado reenvio garantido para ${answeredLeads.length} leads atendidos de hoje!`,
-      totalLeads: answeredLeads.length
+      message: `Iniciado disparo de SMS para ${answeredLeads.length} leads atendidos pendentes!`,
+      totalLeads: answeredLeads.length,
+      leads: answeredLeads.map(l => ({ id: l.id, phone: l.phone, name: l.name, occurrence: l.occurrence }))
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
