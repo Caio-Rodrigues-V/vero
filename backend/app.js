@@ -83,7 +83,8 @@ app.get('/api/dashboard/stats', (req, res) => {
           SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
           SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
           SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
-          SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+          SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms,
+          COUNT(DISTINCT CASE WHEN (l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%') THEN l.phone END) as total_quarantine_unique
         FROM leads l
         INNER JOIN campaigns c ON l.campaign_id = c.id
         WHERE (
@@ -103,7 +104,8 @@ app.get('/api/dashboard/stats', (req, res) => {
             SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
             SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
             SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
-            SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+            SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms,
+            COUNT(DISTINCT CASE WHEN (l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%') THEN l.phone END) as total_quarantine_unique
           FROM leads l
           WHERE l.campaign_id = ?
         `;
@@ -127,6 +129,13 @@ app.get('/api/dashboard/stats', (req, res) => {
         dayCampaignsCount = activeDayCamps ? (activeDayCamps.total_campaigns || 0) : 1;
       }
 
+      const activeQuarantineRow = get(`
+        SELECT COUNT(DISTINCT phone) as count 
+        FROM leads 
+        WHERE (sms_status = 'completed' OR (call_status = 'completed' AND occurrence IS NOT NULL AND occurrence NOT LIKE 'TENTATIVA - %'))
+          AND updated_at >= datetime('now', '-3 days')
+      `) || {};
+
       return res.json({
         total_campaigns: dayCampaignsCount,
         total_leads: dayStats.unique_leads || dayStats.total_leads || 0,
@@ -137,6 +146,8 @@ app.get('/api/dashboard/stats', (req, res) => {
         total_successful_sms: dayStats.total_successful_sms || 0,
         total_failed_sms: dayStats.total_failed_sms || 0,
         total_quarantine_sms: dayStats.total_quarantine_sms || 0,
+        total_quarantine_unique: dayStats.total_quarantine_unique || 0,
+        total_quarantine_active: activeQuarantineRow.count || 0,
       });
     }
 
@@ -151,7 +162,8 @@ app.get('/api/dashboard/stats', (req, res) => {
         SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
         SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
         SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
-        SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+        SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms,
+        COUNT(DISTINCT CASE WHEN (l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%') THEN l.phone END) as total_quarantine_unique
       FROM leads l
     `;
     const params = [];
@@ -166,7 +178,8 @@ app.get('/api/dashboard/stats', (req, res) => {
           SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
           SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
           SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
-          SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+          SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms,
+          COUNT(DISTINCT CASE WHEN (l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%') THEN l.phone END) as total_quarantine_unique
         FROM leads l
         WHERE l.campaign_id = ?
       `;
@@ -174,6 +187,13 @@ app.get('/api/dashboard/stats', (req, res) => {
     }
 
     const stats = get(query, params) || {};
+
+    const activeQuarantineRow = get(`
+      SELECT COUNT(DISTINCT phone) as count 
+      FROM leads 
+      WHERE (sms_status = 'completed' OR (call_status = 'completed' AND occurrence IS NOT NULL AND occurrence NOT LIKE 'TENTATIVA - %'))
+        AND updated_at >= datetime('now', '-3 days')
+    `) || {};
 
     const response = {
       total_campaigns: stats.total_campaigns || 0,
@@ -185,6 +205,8 @@ app.get('/api/dashboard/stats', (req, res) => {
       total_successful_sms: stats.total_successful_sms || 0,
       total_failed_sms: stats.total_failed_sms || 0,
       total_quarantine_sms: stats.total_quarantine_sms || 0,
+      total_quarantine_unique: stats.total_quarantine_unique || 0,
+      total_quarantine_active: activeQuarantineRow.count || 0,
     };
 
     res.json(response);

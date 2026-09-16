@@ -78,6 +78,8 @@ interface DashboardStats {
   total_successful_sms: number;
   total_failed_sms: number;
   total_quarantine_sms?: number;
+  total_quarantine_unique?: number;
+  total_quarantine_active?: number;
 }
 
 const BACKEND_URL = window.location.origin.includes('localhost:5173') ? 'http://localhost:3001' : window.location.origin;
@@ -793,6 +795,23 @@ export default function App() {
                         ))}
                       </select>
                     </div>
+
+                    {/* Badge Quarentena Ativa (Leads Únicos) */}
+                    <div 
+                      className="bg-amber-50 border border-amber-200/80 text-amber-950 px-3.5 py-2 rounded-lg flex items-center gap-2 shadow-2xs" 
+                      title="Total de clientes únicos que já foram contatados nos últimos 3 dias e estão protegidos contra discagens duplicadas"
+                    >
+                      <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Quarentena (3d):</span>
+                      <span className="text-sm font-bold tabular-nums text-amber-900">
+                        {(stats.total_quarantine_unique || stats.total_quarantine_active || 0).toLocaleString('pt-BR')} leads
+                      </span>
+                    </div>
+
+                    {/* Badge Spins (Giros da Base) */}
+                    <div className="bg-sky-50 border border-sky-200/80 text-sky-950 px-3.5 py-2 rounded-lg flex items-center gap-2 shadow-2xs">
+                      <span className="text-xs font-semibold text-sky-700 uppercase tracking-wider">Spins:</span>
+                      <span className="text-sm font-bold tabular-nums text-sky-900">{formattedSpins}x</span>
+                    </div>
                   </div>
                 </div>
 
@@ -950,11 +969,11 @@ export default function App() {
                         pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} 
                         status="success" 
                       />
-                      {totalQuarentena3Dias > 0 && (
+                      {(stats.total_quarantine_unique || totalQuarentena3Dias) > 0 && (
                         <FlowNode 
-                          title="🟡 SMS ENVIADO 3 DIAS" 
-                          count={totalQuarentena3Dias} 
-                          pct={`${(totalDiscados > 0 ? (totalQuarentena3Dias / totalDiscados) * 100 : 0).toFixed(2).replace('.', ',')}%`} 
+                          title="🟡 Quarentena (Leads Únicos)" 
+                          count={stats.total_quarantine_unique || totalQuarentena3Dias} 
+                          pct={`${(totalLeadsBase > 0 ? ((stats.total_quarantine_unique || totalQuarentena3Dias) / totalLeadsBase) * 100 : 0).toFixed(1).replace('.', ',')}%`} 
                           status="warning" 
                         />
                       )}
