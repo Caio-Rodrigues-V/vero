@@ -1663,14 +1663,13 @@ app.post('/api/vapi-webhook', async (req, res) => {
       String(tabulation || '').toUpperCase().includes('CAIXA') || 
       String(tabulation || '').toUpperCase().includes('VOICEMAIL');
 
-    const isSuccess = !isVoicemail && (
+    const isSuccess = !isVoicemail && duration > 0 && (
       isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration) ||
       tabulationCode === 'HUMAN_COMPLETED' ||
       tabulation === 'PROMESSA_DE_PAGAMENTO' ||
       validCpcOccurrences.includes(occurrence) ||
       occurrence.includes('ATENDEU') ||
-      occurrence.includes('LIGAÇÃO MUDA') ||
-      duration > 0
+      occurrence.includes('LIGAÇÃO MUDA')
     );
 
     const callStatus = isSuccess ? 'completed' : 'failed';
@@ -2057,13 +2056,25 @@ app.post('/api/leads/reclassify-occurrences', (req, res) => {
 app.listen(PORT, () => {
   console.log(`[SERVER] Vero Debt Recovery rodando em http://localhost:${PORT}`);
   
-  // Atualizar ocorrências para as 3 tabulações oficiais simples
   try {
-    // 1. Quem atendeu ou recebeu SMS -> ATENDEU - SMS ENVIADO
+    // 0. Corrigir chamadas com duração 0s (não atenderam) para status failed e ocorrência NÃO ATENDEU
+    run(`
+      UPDATE leads 
+      SET call_status = 'failed',
+          sms_status = CASE WHEN sms_status = 'completed' AND (call_duration = 0 OR call_duration IS NULL) THEN 'failed' ELSE sms_status END,
+          occurrence = 'NÃO ATENDEU'
+      WHERE (call_duration = 0 OR call_duration IS NULL OR call_log LIKE '%Duração: 0s%')
+        AND (occurrence LIKE 'ATENDEU%' OR occurrence LIKE 'LIGAÇÃO MUDA%' OR call_status = 'completed')
+        AND occurrence NOT LIKE '%3 DIAS%'
+        AND (transcript IS NULL OR transcript = '' OR transcript LIKE '%Nenhuma transcrição%')
+    `);
+
+    // 1. Quem atendeu com duração real ou recebeu SMS -> ATENDEU - SMS ENVIADO
     const res = run(`
       UPDATE leads 
       SET occurrence = 'ATENDEU - SMS ENVIADO' 
-      WHERE (call_status = 'completed' OR sms_status = 'completed')
+      WHERE (call_status = 'completed' AND (call_duration > 0 OR transcript IS NOT NULL))
+         OR (sms_status = 'completed' AND call_duration > 0)
     `);
 
     // 2. Quem foi pulado por envio nos últimos 3 dias -> SMS ENVIADO 3 DIAS
