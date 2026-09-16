@@ -62,8 +62,21 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration, ta
   const tab = normalizeText(tabulation || '').toUpperCase().trim();
   const code = (tabulationCode || '').toUpperCase().trim();
 
-  // 1. Falhas e não atendimento absoluto (duração 0 ou não atendeu)
-  if (dur === 0 || reason === 'no-answer' || reason === 'no_answer' || reason === 'customer-did-not-answer' || reason === 'busy' || reason === 'user_busy' || reason === 'customer-busy' || reason === 'dial_failed') {
+  const customerSpeech = extractCustomerSpeech(transcript || '');
+  const hasSpeech = customerSpeech.trim().length > 0;
+
+  // 1. Falhas, não atendimento ou recusa imediata (< 3s e sem voz do cliente)
+  if (
+    dur === 0 || 
+    (dur < 3 && !hasSpeech) ||
+    reason === 'no-answer' || 
+    reason === 'no_answer' || 
+    reason === 'customer-did-not-answer' || 
+    reason === 'busy' || 
+    reason === 'user_busy' || 
+    reason === 'customer-busy' || 
+    reason === 'dial_failed'
+  ) {
     if (
       tab === 'CAIXA_POSTAL' || 
       tab.includes('CAIXA_POSTAL') || 

@@ -712,13 +712,25 @@ function isVapiExplicitFailure(endedReason) {
 
 function isVapiAnsweredCall(call, transcript, duration) {
   const reason = String(getVapiEndedReason(call) || '').toLowerCase();
+  const hasSpeech = hasVapiCustomerSpeech(call, transcript);
+  const dur = Number(duration || 0);
+
+  if (isVapiExplicitFailure(reason)) {
+    return false;
+  }
+
+  // Recusa no celular ou queda antes de atender (< 3s e sem fala do cliente) NÃO é atendeu
+  if (dur < 3 && !hasSpeech) {
+    return false;
+  }
+
   const isConnectedEnd = reason.includes('silence') ||
     (reason.includes('customer') && !reason.includes('did-not-answer') && !reason.includes('busy')) ||
     reason.includes('assistant-completed-task') ||
     reason.includes('assistant-ended-call') ||
     reason.includes('sip-completed-call');
 
-  return !isVapiExplicitFailure(reason) && (isConnectedEnd || duration > 0 || hasVapiCustomerSpeech(call, transcript));
+  return (hasSpeech || dur >= 3) && (isConnectedEnd || dur > 0);
 }
 
 function vapiCallBelongsToCampaign(call, campaign, campaignId) {
