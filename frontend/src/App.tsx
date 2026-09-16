@@ -657,9 +657,11 @@ export default function App() {
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
-            const displayedQuarantineCount = (isSpecificCampaign || isDateFiltered)
+            const displayedQuarantineCount = isSpecificCampaign
               ? (stats.total_quarantine_unique ?? 0)
-              : (stats.total_quarantine_active ?? stats.total_quarantine_unique ?? 0);
+              : (isDateFiltered
+                  ? (stats.total_quarantine_unique ?? 0)
+                  : (stats.total_quarantine_unique ?? stats.total_quarantine_sms ?? 0));
 
             const totalQuarentena3Dias = displayedQuarantineCount;
 
