@@ -661,7 +661,7 @@ export default function App() {
               ? (stats.total_quarantine_unique ?? 0)
               : (isDateFiltered
                   ? (stats.total_quarantine_unique ?? 0)
-                  : (stats.total_quarantine_unique ?? stats.total_quarantine_sms ?? 0));
+                  : (stats.total_quarantine_active ?? stats.total_quarantine_unique ?? 0));
 
             const totalQuarentena3Dias = displayedQuarantineCount;
 
