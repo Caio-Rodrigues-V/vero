@@ -555,7 +555,7 @@ export default function App() {
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-800 antialiased">
       {/* Top Navbar */}
       <header className="bg-[#890038] border-b border-[#72002E] sticky top-0 z-40 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img 
               src="/logo_vero.png" 
@@ -574,7 +574,7 @@ export default function App() {
           <div className="flex items-center gap-4">
             <button 
               onClick={handleSync}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-white hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 rounded-lg transition"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-white hover:text-white bg-white/10 hover:bg-white/20 border border-white/15 rounded-lg transition cursor-pointer"
             >
               <RefreshCw size={14} /> Sincronizar
             </button>
@@ -589,25 +589,25 @@ export default function App() {
       </header>
 
       {/* Main Content Layout */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex w-full max-w-[1720px] mx-auto">
         {/* Sidebar Navigation */}
-        <aside className="w-64 border-r border-slate-200/80 bg-white/60 backdrop-blur-xs p-4 space-y-6 hidden md:block">
+        <aside className="w-60 border-r border-slate-200/80 bg-white/80 backdrop-blur-xs p-4 space-y-6 hidden md:block shrink-0">
           <div className="space-y-1">
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-lg transition cursor-pointer ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <BarChart2 size={16} /> Dashboard
             </button>
             <button 
               onClick={() => setActiveTab('campaigns')}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition ${activeTab === 'campaigns' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-lg transition cursor-pointer ${activeTab === 'campaigns' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <Upload size={16} /> Campanhas / Upload
             </button>
             <button 
               onClick={() => setActiveTab('leads')}
-              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg transition ${activeTab === 'leads' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-lg transition cursor-pointer ${activeTab === 'leads' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
             >
               <Users size={16} /> Visualizador de Leads
             </button>
@@ -615,7 +615,7 @@ export default function App() {
         </aside>
 
         {/* Área de Visualização */}
-        <div className="p-8 flex-1 space-y-8">
+        <div className="p-6 lg:p-8 flex-1 min-w-0 space-y-8">
           
           {/* TAB 1: DASHBOARD OPERACIONAL EXECUTIVO */}
           {activeTab === 'dashboard' && (() => {
@@ -730,9 +730,9 @@ export default function App() {
             const todayIso = new Date().toISOString().split('T')[0];
 
             return (
-              <div className="max-w-[1720px] mx-auto space-y-6">
+              <div className="w-full space-y-6">
                 {/* 1. Header & Filtros Compactos Modernos */}
-                <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1">
                       <span>Dashboards</span>
@@ -750,10 +750,10 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Barra de Filtros Compacta */}
+                  {/* Barra de Filtros Alinhada */}
                   <div className="flex flex-wrap items-center gap-3">
                     {/* Filtro de Campanha */}
-                    <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
+                    <div className="flex items-center gap-2 bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200/80 shadow-2xs">
                       <span className="text-xs font-medium text-slate-500">Campanha:</span>
                       <select 
                         value={selectedCampaignId}
@@ -761,7 +761,7 @@ export default function App() {
                           const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
                           handleCampaignSelect(val);
                         }}
-                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer max-w-[200px]"
+                        className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer max-w-[220px]"
                       >
                         <option value="all">Todas as Campanhas</option>
                         {campaigns.map(c => (
@@ -771,7 +771,7 @@ export default function App() {
                     </div>
 
                     {/* Filtro de Data do Dia */}
-                    <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
+                    <div className="flex items-center gap-2 bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200/80 shadow-2xs">
                       <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
                         <Calendar size={13} className="text-slate-400" /> Data:
                       </span>
@@ -784,7 +784,7 @@ export default function App() {
                           fetchOccurrences(selectedCampaignId, val);
                           fetchHourlyStats(selectedCampaignId, startHour, endHour, val);
                         }}
-                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                        className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
                       >
                         <option value="all">📅 Todos os Dias (Acumulado)</option>
                         <option value={todayIso}>
@@ -802,25 +802,10 @@ export default function App() {
                             );
                           })}
                       </select>
-
-                      {/* Date Picker Nativo */}
-                      <input 
-                        type="date"
-                        value={selectedDate === 'all' ? '' : selectedDate}
-                        onChange={(e) => {
-                          const val = e.target.value || 'all';
-                          setSelectedDate(val);
-                          fetchStats(selectedCampaignId, val);
-                          fetchOccurrences(selectedCampaignId, val);
-                          fetchHourlyStats(selectedCampaignId, startHour, endHour, val);
-                        }}
-                        className="text-[11px] font-medium text-slate-600 bg-white border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer"
-                        title="Escolher data específica no calendário"
-                      />
                     </div>
 
                     {/* Filtro de Horas */}
-                    <div className="flex items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-lg border border-slate-200/70">
+                    <div className="flex items-center gap-2 bg-slate-50/90 px-3 py-2 rounded-lg border border-slate-200/80 shadow-2xs">
                       <span className="text-xs font-medium text-slate-500">Horário:</span>
                       <select 
                         value={startHour}
@@ -829,7 +814,7 @@ export default function App() {
                           setStartHour(val);
                           fetchHourlyStats(selectedCampaignId, val, endHour, selectedDate);
                         }}
-                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                        className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
                       >
                         {[8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(h => (
                           <option key={h} value={h}>{h}h</option>
@@ -843,26 +828,12 @@ export default function App() {
                           setEndHour(val);
                           fetchHourlyStats(selectedCampaignId, startHour, val, selectedDate);
                         }}
-                        className="text-xs font-medium text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                        className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
                       >
                         {[9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].map(h => (
                           <option key={h} value={h}>{h}h</option>
                         ))}
                       </select>
-                    </div>
-
-                    {/* Badge Spins (Giros da Base) */}
-                    <div className="bg-sky-50 border border-sky-200/80 text-sky-950 px-3.5 py-2 rounded-lg flex items-center gap-2 shadow-2xs">
-                      <span className="text-xs font-semibold text-sky-700 uppercase tracking-wider">Spins:</span>
-                      <span className="text-sm font-bold tabular-nums text-sky-900">{formattedSpins}x</span>
-                    </div>
-
-                    {/* Badge Discados (Compact SaaS Style) */}
-                    <div className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-3 shadow-xs">
-                      <span className="text-xs font-medium text-slate-300">
-                        {isDateFiltered ? `Discados (${formattedDateLabel})` : 'Discados'}
-                      </span>
-                      <span className="text-sm font-semibold tabular-nums tracking-tight">{totalDiscados.toLocaleString('pt-BR')}</span>
                     </div>
                   </div>
                 </div>

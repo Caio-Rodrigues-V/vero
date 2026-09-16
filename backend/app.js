@@ -78,20 +78,38 @@ app.get('/api/dashboard/stats', (req, res) => {
     if (date) {
       let query = `
         SELECT 
-          COUNT(DISTINCT phone) as unique_leads,
-          COUNT(id) as total_leads,
-          SUM(CASE WHEN call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
-          SUM(CASE WHEN call_status = 'completed' OR (occurrence LIKE 'ATENDEU%' AND occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
-          SUM(CASE WHEN call_status = 'failed' OR occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
-          SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
-          SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
-          SUM(CASE WHEN occurrence LIKE '%3 DIAS%' OR occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
-        FROM leads
-        WHERE date(datetime(updated_at, '-3 hours')) = date(?)
+          COUNT(DISTINCT l.phone) as unique_leads,
+          COUNT(l.id) as total_leads,
+          SUM(CASE WHEN l.call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
+          SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
+          SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
+          SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
+          SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
+          SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+        FROM leads l
+        INNER JOIN campaigns c ON l.campaign_id = c.id
+        WHERE (
+          date(datetime(c.created_at, '-3 hours')) = date(?)
+          OR c.name LIKE '%' || strftime('%d/%m', ?) || '%'
+          OR (date(datetime(l.updated_at, '-3 hours')) = date(?) AND c.id = (SELECT id FROM campaigns ORDER BY id DESC LIMIT 1))
+        )
       `;
-      const params = [date];
+      const params = [date, date, date];
       if (campaignId && campaignId !== 'all') {
-        query += ' AND campaign_id = ?';
+        query = `
+          SELECT 
+            COUNT(DISTINCT l.phone) as unique_leads,
+            COUNT(l.id) as total_leads,
+            SUM(CASE WHEN l.call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
+            SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
+            SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
+            SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
+            SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
+            SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+          FROM leads l
+          WHERE l.campaign_id = ?
+        `;
+        params.length = 0;
         params.push(campaignId);
       }
 
@@ -106,17 +124,13 @@ app.get('/api/dashboard/stats', (req, res) => {
         dayCampaignsCount = 1;
       } else {
         const activeDayCamps = get(`
-          SELECT 
-            COUNT(DISTINCT c.id) as total_campaigns
+          SELECT COUNT(DISTINCT c.id) as total_campaigns
           FROM campaigns c
-          WHERE c.id IN (
-            SELECT DISTINCT campaign_id 
-            FROM leads 
-            WHERE date(datetime(updated_at, '-3 hours')) = date(?)
-          )
-        `, [date]);
+          WHERE date(datetime(c.created_at, '-3 hours')) = date(?)
+             OR c.name LIKE '%' || strftime('%d/%m', ?) || '%'
+        `, [date, date]);
 
-        dayCampaignsCount = activeDayCamps ? (activeDayCamps.total_campaigns || 0) : 0;
+        dayCampaignsCount = activeDayCamps ? (activeDayCamps.total_campaigns || 0) : 1;
       }
 
       return res.json({
