@@ -100,14 +100,10 @@ async function processCampaign(campaignId, force = false) {
 
       await Promise.all(leads.map(async (lead) => {
         // Trava de Quarentena de 3 Dias: Se este número recebeu SMS ou teve CPC nos últimos 3 dias, pula a discagem
-        // (Campanhas com nome 'teste' ou números de teste do Faraó são 100% isentos da quarentena)
         const cleanPhone = String(lead.phone).replace(/\D/g, '');
-        const testPhones = ['981811077', '966491519', '988887777'];
-        const isTestNumber = testPhones.some(tp => cleanPhone.includes(tp));
-        const shouldBypassQuarantine = isTestCampaign || isTestNumber;
 
-        const recentContact = !shouldBypassQuarantine && get(
-          `SELECT id FROM leads 
+        const recentContact = get(
+          `SELECT id, name, updated_at FROM leads 
            WHERE (phone = ? OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') = ?)
              AND id != ? 
              AND (sms_status = 'completed' OR (call_status = 'completed' AND occurrence IS NOT NULL AND occurrence NOT LIKE 'TENTATIVA - %')) 

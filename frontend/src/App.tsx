@@ -798,6 +798,17 @@ export default function App() {
                       </select>
                     </div>
 
+                    {/* Badge Total de Leads */}
+                    <div 
+                      className="bg-slate-100 border border-slate-200/80 text-slate-800 px-3.5 py-2 rounded-lg flex items-center gap-2 shadow-2xs" 
+                      title="Total de leads da base"
+                    >
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Leads:</span>
+                      <span className="text-sm font-bold tabular-nums text-slate-900">
+                        {totalLeadsBase.toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+
                     {/* Badge Quarentena Ativa (Leads Únicos) */}
                     <div 
                       className="bg-amber-50 border border-amber-200/80 text-amber-950 px-3.5 py-2 rounded-lg flex items-center gap-2 shadow-2xs" 
