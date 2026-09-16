@@ -657,7 +657,11 @@ export default function App() {
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
-            const totalQuarentena3Dias = (occurrences.find(o => o.occurrence?.includes('3 DIAS') || o.occurrence?.includes('QUARENTENA'))?.count) || stats.total_quarantine_sms || 0;
+            const displayedQuarantineCount = (isSpecificCampaign || isDateFiltered)
+              ? (stats.total_quarantine_unique ?? 0)
+              : (stats.total_quarantine_active ?? stats.total_quarantine_unique ?? 0);
+
+            const totalQuarentena3Dias = displayedQuarantineCount;
 
             const hitRate = totalDiscados > 0 ? (totalAtendidas / totalDiscados) * 100 : 0;
             const conversaoRate = totalDiscados > 0 ? (totalSms / totalDiscados) * 100 : 0;
@@ -985,11 +989,11 @@ export default function App() {
                         pct={`${conversaoRate.toFixed(2).replace('.', ',')}%`} 
                         status="success" 
                       />
-                      {(stats.total_quarantine_unique || totalQuarentena3Dias) > 0 && (
+                      {displayedQuarantineCount > 0 && (
                         <FlowNode 
                           title="🟡 Quarentena (Leads Únicos)" 
-                          count={stats.total_quarantine_unique || totalQuarentena3Dias} 
-                          pct={`${(totalLeadsBase > 0 ? ((stats.total_quarantine_unique || totalQuarentena3Dias) / totalLeadsBase) * 100 : 0).toFixed(1).replace('.', ',')}%`} 
+                          count={displayedQuarantineCount} 
+                          pct={`${(totalLeadsBase > 0 ? (displayedQuarantineCount / totalLeadsBase) * 100 : 0).toFixed(1).replace('.', ',')}%`} 
                           status="warning" 
                         />
                       )}
