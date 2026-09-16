@@ -1741,18 +1741,19 @@ app.post('/api/vapi-webhook', async (req, res) => {
       tabulationCode
     });
 
-    const isSilentOrFake = occurrence === 'LIGAÇÃO MUDA' || occurrence === 'CAIXA POSTAL' || occurrence === 'NÃO ATENDEU';
-    const isVoicemail = isSilentOrFake || 
+    const isVoicemail = occurrence === 'CAIXA POSTAL' || 
       String(endedReason || '').toLowerCase().includes('voicemail') || 
       String(tabulation || '').toUpperCase().includes('CAIXA') || 
       String(tabulation || '').toUpperCase().includes('VOICEMAIL');
 
-    const isSuccess = !isVoicemail && duration >= 3 && (
+    const isSuccess = !isVoicemail && duration > 0 && (
       isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration) ||
       tabulationCode === 'HUMAN_COMPLETED' ||
       tabulation === 'PROMESSA_DE_PAGAMENTO' ||
       validCpcOccurrences.includes(occurrence) ||
-      (occurrence.includes('ATENDEU') && !occurrence.includes('NÃO'))
+      (occurrence.includes('ATENDEU') && !occurrence.includes('NÃO')) ||
+      occurrence.includes('LIGAÇÃO MUDA') ||
+      occurrence.includes('MUD')
     );
 
     const callStatus = isSuccess ? 'completed' : 'failed';
