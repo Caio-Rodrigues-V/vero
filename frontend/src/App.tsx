@@ -805,7 +805,10 @@ export default function App() {
                     >
                       <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Quarentena (3d):</span>
                       <span className="text-sm font-bold tabular-nums text-amber-900">
-                        {(stats.total_quarantine_unique || stats.total_quarantine_active || 0).toLocaleString('pt-BR')} leads
+                        {((isSpecificCampaign || isDateFiltered)
+                          ? (stats.total_quarantine_unique ?? 0)
+                          : (stats.total_quarantine_active ?? stats.total_quarantine_unique ?? 0)
+                        ).toLocaleString('pt-BR')} leads
                       </span>
                     </div>
 
