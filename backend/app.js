@@ -75,13 +75,13 @@ app.get('/api/dashboard/stats', (req, res) => {
   try {
     recalculateActiveCampaigns();
 
-    if (date) {
+    if (date && date !== 'all') {
       let query = `
         SELECT 
           COUNT(DISTINCT l.phone) as unique_leads,
           COUNT(l.id) as total_leads,
           SUM(CASE WHEN l.call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
-          SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
+          SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') OR l.occurrence LIKE '%LIGAÇÃO MUDA%' OR l.occurrence LIKE '%PROMESSA%' THEN 1 ELSE 0 END) as total_successful_calls,
           SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
           SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
           SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
@@ -91,7 +91,7 @@ app.get('/api/dashboard/stats', (req, res) => {
         WHERE (
           date(datetime(c.created_at, '-3 hours')) = date(?)
           OR c.name LIKE '%' || strftime('%d/%m', ?) || '%'
-          OR (date(datetime(l.updated_at, '-3 hours')) = date(?) AND c.id = (SELECT id FROM campaigns ORDER BY id DESC LIMIT 1))
+          OR date(datetime(l.updated_at, '-3 hours')) = date(?)
         )
       `;
       const params = [date, date, date];
@@ -101,7 +101,7 @@ app.get('/api/dashboard/stats', (req, res) => {
             COUNT(DISTINCT l.phone) as unique_leads,
             COUNT(l.id) as total_leads,
             SUM(CASE WHEN l.call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
-            SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') THEN 1 ELSE 0 END) as total_successful_calls,
+            SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') OR l.occurrence LIKE '%LIGAÇÃO MUDA%' OR l.occurrence LIKE '%PROMESSA%' THEN 1 ELSE 0 END) as total_successful_calls,
             SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
             SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
             SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
@@ -115,12 +115,8 @@ app.get('/api/dashboard/stats', (req, res) => {
 
       const dayStats = get(query, params) || {};
 
-      // Base de leads únicos da operação no dia
-      let dayBase = dayStats.unique_leads || dayStats.total_leads || 0;
       let dayCampaignsCount = 0;
       if (campaignId && campaignId !== 'all') {
-        const camp = get('SELECT total_leads FROM campaigns WHERE id = ?', [campaignId]);
-        dayBase = dayStats.unique_leads || (camp ? camp.total_leads : dayStats.total_leads) || 0;
         dayCampaignsCount = 1;
       } else {
         const activeDayCamps = get(`
@@ -135,8 +131,8 @@ app.get('/api/dashboard/stats', (req, res) => {
 
       return res.json({
         total_campaigns: dayCampaignsCount,
-        total_leads: dayBase || dayStats.total_processed || 0,
-        total_unique_leads: dayStats.unique_leads || dayBase || 0,
+        total_leads: dayStats.unique_leads || dayStats.total_leads || 0,
+        total_unique_leads: dayStats.unique_leads || dayStats.total_leads || 0,
         total_processed: dayStats.total_processed || 0,
         total_successful_calls: dayStats.total_successful_calls || 0,
         total_failed_calls: dayStats.total_failed_calls || 0,
@@ -146,53 +142,51 @@ app.get('/api/dashboard/stats', (req, res) => {
       });
     }
 
-    // Sem filtro de data: totais acumulados de campanhas
+    // Sem filtro de data: totais reais calculados a partir dos leads
     let query = `
       SELECT 
-        COUNT(id) as total_campaigns,
-        SUM(total_leads) as total_leads,
-        SUM(processed_leads) as total_processed,
-        SUM(successful_calls) as total_successful_calls,
-        SUM(failed_calls) as total_failed_calls,
-        SUM(successful_sms) as total_successful_sms,
-        SUM(failed_sms) as total_failed_sms
-      FROM campaigns
+        (SELECT COUNT(id) FROM campaigns) as total_campaigns,
+        COUNT(DISTINCT l.phone) as unique_leads,
+        COUNT(l.id) as total_leads,
+        SUM(CASE WHEN l.call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
+        SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') OR l.occurrence LIKE '%LIGAÇÃO MUDA%' OR l.occurrence LIKE '%PROMESSA%' THEN 1 ELSE 0 END) as total_successful_calls,
+        SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
+        SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
+        SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
+        SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+      FROM leads l
     `;
     const params = [];
     if (campaignId && campaignId !== 'all') {
       query = `
         SELECT 
           1 as total_campaigns,
-          total_leads,
-          processed_leads as total_processed,
-          successful_calls as total_successful_calls,
-          failed_calls as total_failed_calls,
-          successful_sms as total_successful_sms,
-          failed_sms as total_failed_sms
-        FROM campaigns
-        WHERE id = ?
+          COUNT(DISTINCT l.phone) as unique_leads,
+          COUNT(l.id) as total_leads,
+          SUM(CASE WHEN l.call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as total_processed,
+          SUM(CASE WHEN l.call_status = 'completed' OR (l.occurrence LIKE 'ATENDEU%' AND l.occurrence NOT LIKE '%NÃO%') OR l.occurrence LIKE '%LIGAÇÃO MUDA%' OR l.occurrence LIKE '%PROMESSA%' THEN 1 ELSE 0 END) as total_successful_calls,
+          SUM(CASE WHEN l.call_status = 'failed' OR l.occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as total_failed_calls,
+          SUM(CASE WHEN l.sms_status = 'completed' THEN 1 ELSE 0 END) as total_successful_sms,
+          SUM(CASE WHEN l.sms_status = 'failed' THEN 1 ELSE 0 END) as total_failed_sms,
+          SUM(CASE WHEN l.occurrence LIKE '%3 DIAS%' OR l.occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
+        FROM leads l
+        WHERE l.campaign_id = ?
       `;
       params.push(campaignId);
     }
 
     const stats = get(query, params) || {};
 
-    const quarantineQuery = `
-      SELECT SUM(CASE WHEN occurrence LIKE '%3 DIAS%' OR occurrence LIKE '%QUARENTENA%' THEN 1 ELSE 0 END) as total_quarantine_sms
-      FROM leads
-      ${campaignId && campaignId !== 'all' ? 'WHERE campaign_id = ?' : ''}
-    `;
-    const quarantineRow = get(quarantineQuery, campaignId && campaignId !== 'all' ? [campaignId] : []);
-
     const response = {
       total_campaigns: stats.total_campaigns || 0,
-      total_leads: stats.total_leads || 0,
+      total_leads: stats.unique_leads || stats.total_leads || 0,
+      total_unique_leads: stats.unique_leads || stats.total_leads || 0,
       total_processed: stats.total_processed || 0,
       total_successful_calls: stats.total_successful_calls || 0,
       total_failed_calls: stats.total_failed_calls || 0,
       total_successful_sms: stats.total_successful_sms || 0,
       total_failed_sms: stats.total_failed_sms || 0,
-      total_quarantine_sms: quarantineRow ? (quarantineRow.total_quarantine_sms || 0) : 0,
+      total_quarantine_sms: stats.total_quarantine_sms || 0,
     };
 
     res.json(response);

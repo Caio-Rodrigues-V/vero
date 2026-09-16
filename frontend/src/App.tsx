@@ -628,70 +628,23 @@ export default function App() {
               ? selectedDate.split('-').reverse().join('/')
               : 'Acumulado Geral';
 
-            // Identificação das campanhas pertencentes ao dia selecionado pelo nome (DD/MM/YYYY ou DD/MM)
-            let dayCampaigns: Campaign[] = [];
-            if (isDateFiltered) {
-              const [y, m, d] = selectedDate.split('-');
-              const datePtBr = `${d}/${m}/${y}`;
-              const datePtBrShort = `${d}/${m}`;
-              dayCampaigns = campaigns.filter(c => 
-                c.name.includes(datePtBr) || c.name.includes(datePtBrShort)
-              );
-            }
-
-            // 1. Volume Discado (Tentativas de todas as campanhas do dia)
-            const totalDiscados = isDateFiltered
-              ? (stats.total_processed || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) : 0))
-              : (isSpecificCampaign
-                  ? (activeCampaign ? activeCampaign.processed_leads : 0)
-                  : (campaigns.reduce((acc, c) => acc + (c.processed_leads || 0), 0) || stats.total_processed || 0));
+            // 1. Volume Discado (Tentativas de discagem)
+            const totalDiscados = stats.total_processed || 0;
 
             // 2. Base Real de Leads (Tamanho da lista única de clientes carregados)
-            const totalLeadsBase = isSpecificCampaign
-              ? (activeCampaign ? activeCampaign.total_leads : 0)
-              : (isDateFiltered
-                  ? (
-                      (dayCampaigns.length > 0 && dayCampaigns[0].total_leads > 0 ? dayCampaigns[0].total_leads : 0) ||
-                      stats.total_unique_leads ||
-                      (dayCampaigns.length > 0 && totalDiscados > 0 ? Math.round(totalDiscados / dayCampaigns.length) : 0) ||
-                      stats.total_leads ||
-                      totalDiscados
-                    )
-                  : (campaigns.reduce((acc, c) => acc + (c.total_leads || 0), 0) || stats.total_leads || 0));
+            const totalLeadsBase = stats.total_unique_leads || stats.total_leads || totalDiscados || 0;
 
             // 3. Conexões Atendidas (Alô)
-            const totalAtendidas = isDateFiltered
-              ? (stats.total_successful_calls || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) : 0))
-              : (isSpecificCampaign
-                  ? (activeCampaign ? activeCampaign.successful_calls : 0)
-                  : (campaigns.reduce((acc, c) => acc + (c.successful_calls || 0), 0) || stats.total_successful_calls || 0));
+            const totalAtendidas = stats.total_successful_calls || 0;
 
             // 4. Não Atendidas
-            const totalNaoAtendidas = isDateFiltered
-              ? (stats.total_failed_calls || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) : 0))
-              : (isSpecificCampaign
-                  ? (activeCampaign ? activeCampaign.failed_calls : 0)
-                  : (campaigns.reduce((acc, c) => acc + (c.failed_calls || 0), 0) || stats.total_failed_calls || 0));
+            const totalNaoAtendidas = stats.total_failed_calls || 0;
 
             // 5. SMS Enviados
-            const totalSms = isDateFiltered
-              ? (stats.total_successful_sms || (dayCampaigns.length > 0 ? dayCampaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) : 0))
-              : (isSpecificCampaign
-                  ? (activeCampaign ? activeCampaign.successful_sms : 0)
-                  : (campaigns.reduce((acc, c) => acc + (c.successful_sms || 0), 0) || stats.total_successful_sms || 0));
+            const totalSms = stats.total_successful_sms || 0;
 
-            // 6. Cálculo dos Spins (Giros da Base): Discagens do dia / Base de Leads
-            const activeSpins = isDateFiltered
-              ? (
-                  totalLeadsBase > 0
-                    ? (totalDiscados / totalLeadsBase)
-                    : (dayCampaigns.length > 0 ? dayCampaigns.length : 1.0)
-                )
-              : (
-                  isSpecificCampaign
-                    ? (activeCampaign && activeCampaign.total_leads > 0 ? (activeCampaign.processed_leads / activeCampaign.total_leads) : 1.0)
-                    : (totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) : 1.0)
-                );
+            // 6. Cálculo dos Spins (Giros da Base): Discagens / Base de Leads
+            const activeSpins = totalLeadsBase > 0 ? (totalDiscados / totalLeadsBase) : (totalDiscados > 0 ? 1.0 : 0);
 
             const formattedSpins = activeSpins.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
 
@@ -704,7 +657,7 @@ export default function App() {
             // Agrupamento estrito nas 3 Tabulações Oficiais da Vero
             const groupedOccurrences = occurrences.reduce((acc, o) => {
               const occ = (o.occurrence || '').toUpperCase();
-              const isAnswered = occ.startsWith('ATENDEU') || occ.includes('CONFIRMOU') || occ.includes('ENVIO SMS');
+              const isAnswered = occ.startsWith('ATENDEU') || occ.includes('CONFIRMOU') || occ.includes('ENVIO SMS') || occ.includes('LIGAÇÃO MUDA') || occ.includes('PROMESSA');
               const is3Days = occ.includes('3 DIAS') || occ.includes('QUARENTENA');
 
               if (isAnswered) {
@@ -913,8 +866,13 @@ export default function App() {
                   {/* Gráfico Donut de Tabulações */}
                   <div className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] lg:col-span-1 flex flex-col justify-between">
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-900">Distribuição das Tabulações</h3>
-                      <p className="text-xs text-slate-400 mt-0.5 mb-4">Divisão proporcional das 3 tabulações oficiais</p>
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-sm font-semibold text-slate-900">Distribuição das Tabulações</h3>
+                        <span className="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200/60 tabular-nums">
+                          {totalDiscados.toLocaleString('pt-BR')} Discados
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mb-4">Divisão proporcional das 3 tabulações oficiais</p>
                       <div className="h-[230px] w-full relative flex items-center justify-center">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
@@ -932,15 +890,11 @@ export default function App() {
                               ))}
                             </Pie>
                             <RechartsTooltip 
-                              contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '12px' }} 
+                              contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)', fontSize: '12px', zIndex: 50 }} 
                             />
                             <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} iconType="circle" />
                           </PieChart>
                         </ResponsiveContainer>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-6">
-                          <span className="text-xl font-semibold text-slate-900 tabular-nums">{totalDiscados.toLocaleString('pt-BR')}</span>
-                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Total Leads</span>
-                        </div>
                       </div>
                     </div>
                   </div>
