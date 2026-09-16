@@ -61,8 +61,8 @@ initDb();
 startMonitorLoop();
 
 function recalculateActiveCampaigns() {
-  const activeCampaigns = all("SELECT id FROM campaigns WHERE status IN ('processing', 'paused')");
-  for (const campaign of activeCampaigns) {
+  const recentCampaigns = all("SELECT id FROM campaigns ORDER BY id DESC LIMIT 15");
+  for (const campaign of recentCampaigns) {
     updateCampaignStats(campaign.id);
   }
 }

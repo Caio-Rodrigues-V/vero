@@ -1,6 +1,9 @@
 const { get, run } = require('../db.js');
 
 /**
+const { get, run } = require('../db.js');
+
+/**
  * Recalcula e atualiza as estatísticas acumuladas de uma campanha no banco de dados.
  * @param {number} campaignId ID da campanha
  */
@@ -10,9 +13,9 @@ function updateCampaignStats(campaignId) {
     const stats = get(`
       SELECT 
         COUNT(id) as total,
-        SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) as successful_calls,
-        SUM(CASE WHEN call_status = 'failed' THEN 1 ELSE 0 END) as failed_calls,
-        SUM(CASE WHEN sms_status = 'completed' AND (sms_log LIKE '%Transaction ID%' OR sms_log LIKE '%Enviado com sucesso%') THEN 1 ELSE 0 END) as successful_sms,
+        SUM(CASE WHEN call_status = 'completed' OR (occurrence LIKE 'ATENDEU%' AND occurrence NOT LIKE '%NÃO%') OR occurrence LIKE '%LIGAÇÃO MUDA%' OR occurrence LIKE '%PROMESSA%' THEN 1 ELSE 0 END) as successful_calls,
+        SUM(CASE WHEN call_status = 'failed' OR occurrence LIKE '%NÃO ATENDEU%' THEN 1 ELSE 0 END) as failed_calls,
+        SUM(CASE WHEN sms_status = 'completed' THEN 1 ELSE 0 END) as successful_sms,
         SUM(CASE WHEN sms_status = 'failed' THEN 1 ELSE 0 END) as failed_sms,
         SUM(CASE WHEN call_status IN ('completed', 'failed') THEN 1 ELSE 0 END) as processed
       FROM leads
