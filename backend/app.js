@@ -1236,30 +1236,73 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
     );
     const campaignId = campaignResult.lastInsertRowid;
 
-    // 3. Inserir os leads em lote usando transação nativa para alta performance (suporta 20k+ facilmente)
+    // 3. Inserir os leads em lote usando transação nativa para alta performance com pré-trava de quarentena
+    const checkQuarantineStmt = db.prepare(`
+      SELECT id FROM leads 
+      WHERE (phone = ? OR phone LIKE '%' || ? OR REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', '') LIKE '%' || ?)
+        AND (sms_status = 'completed' OR (call_status = 'completed' AND occurrence IS NOT NULL AND occurrence NOT LIKE 'TENTATIVA - %')) 
+        AND updated_at >= datetime('now', '-3 days')
+      LIMIT 1
+    `);
+
     const insertLeadStmt = db.prepare(`
-      INSERT INTO leads (campaign_id, name, phone, cpf, debt_value, due_date, barcode, dias_atraso, status_internet, email)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO leads (campaign_id, name, phone, cpf, debt_value, due_date, barcode, dias_atraso, status_internet, email, call_status, occurrence, call_log, sms_status, sms_log, email_status, email_log)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     console.log(`[SERVER] Inserindo ${leads.length} leads no banco de dados para a campanha #${campaignId}...`);
     const startTime = Date.now();
+    let quarantinedCount = 0;
 
     run('BEGIN TRANSACTION');
     try {
       for (const lead of leads) {
-        insertLeadStmt.run(
-          campaignId, 
-          lead.name, 
-          lead.phone, 
-          lead.cpf || null,
-          lead.debt_value, 
-          lead.due_date, 
-          lead.barcode || null,
-          lead.dias_atraso || 0,
-          lead.status_internet || null,
-          lead.email || null
-        );
+        const cleanDigits = String(lead.phone).replace(/\D/g, '');
+        const phoneSuffix = cleanDigits.length >= 8 ? cleanDigits.slice(-8) : cleanDigits;
+        
+        const recentContact = checkQuarantineStmt.get(lead.phone, phoneSuffix, phoneSuffix);
+        if (recentContact) {
+          quarantinedCount++;
+          insertLeadStmt.run(
+            campaignId, 
+            lead.name, 
+            lead.phone, 
+            lead.cpf || null,
+            lead.debt_value, 
+            lead.due_date, 
+            lead.barcode || null,
+            lead.dias_atraso || 0,
+            lead.status_internet || null,
+            lead.email || null,
+            'failed',
+            'SMS ENVIADO 3 DIAS',
+            'Ignorado: SMS já enviado nos últimos 3 dias.',
+            'failed',
+            'Ignorado: SMS já enviado nos últimos 3 dias.',
+            'failed',
+            'Ignorado: SMS já enviado nos últimos 3 dias.'
+          );
+        } else {
+          insertLeadStmt.run(
+            campaignId, 
+            lead.name, 
+            lead.phone, 
+            lead.cpf || null,
+            lead.debt_value, 
+            lead.due_date, 
+            lead.barcode || null,
+            lead.dias_atraso || 0,
+            lead.status_internet || null,
+            lead.email || null,
+            'pending',
+            null,
+            null,
+            'pending',
+            null,
+            'pending',
+            null
+          );
+        }
       }
       run('COMMIT');
     } catch (err) {
@@ -1267,7 +1310,15 @@ app.post('/api/campaigns/upload', upload.single('file'), async (req, res) => {
       throw err;
     }
     
-    console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms. Iniciando discador para a campanha #${campaignId}...`);
+    console.log(`[SERVER] Inserção concluída em ${Date.now() - startTime}ms (${quarantinedCount} leads bloqueados em quarentena). Iniciando discador para a campanha #${campaignId}...`);
+
+    // Atualizar métricas iniciais da campanha no banco
+    if (quarantinedCount > 0) {
+      run(
+        'UPDATE campaigns SET processed_leads = ?, failed_calls = ? WHERE id = ?',
+        [quarantinedCount, quarantinedCount, campaignId]
+      );
+    }
 
     // Acionar robô de discagem automaticamente
     const { triggerCampaignProcessor } = require('./services/campaignExecutor.js');
