@@ -290,9 +290,10 @@ export default function App() {
   const [occurrences, setOccurrences] = useState<{ occurrence: string; count: number }[]>([]);
   const [exportOccurrenceFilter, setExportOccurrenceFilter] = useState<string>('all');
   
-  // BI e Métricas por Horário e Filtro de Data
+  // BI e Métricas por Horário e Filtro de Data (Padrão: Hoje)
+  const todayIso = new Date().toISOString().split('T')[0];
   const [hourlyData, setHourlyData] = useState<{ hour: string; atendeu: number; naoAtendeu: number; quarentena3Dias: number; total: number }[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>('all'); // 'all' para acumulado geral ou 'YYYY-MM-DD'
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso); // Inicia sempre focado na operação de Hoje
   const [availableDates, setAvailableDates] = useState<{ date_str: string; total_processed: number; successful_calls: number; successful_sms: number }[]>([]);
   const [startHour, setStartHour] = useState<number>(8);
   const [endHour, setEndHour] = useState<number>(21);
