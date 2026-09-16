@@ -1605,10 +1605,6 @@ app.post('/api/vapi-webhook', async (req, res) => {
     const tabulation = message?.analysis?.tabulation || call?.analysis?.tabulation || message?.tabulation || call?.tabulation;
     const tabulationCode = message?.analysis?.tabulation_code || call?.analysis?.tabulation_code || message?.tabulation_code || call?.tabulation_code;
 
-    const isSuccess = isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration) || tabulationCode === 'HUMAN_COMPLETED' || tabulation === 'PROMESSA_DE_PAGAMENTO' || duration > 3;
-    const callStatus = isSuccess ? 'completed' : 'failed';
-    const logText = `[VOICE] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Tabulação: ${tabulation || 'N/A'}`;
-    
     // Classificar ocorrência
     const occurrence = classifyCallOccurrence({
       endedReason: endedReason,
@@ -1618,6 +1614,24 @@ app.post('/api/vapi-webhook', async (req, res) => {
       tabulation,
       tabulationCode
     });
+
+    const isVoicemail = occurrence === 'CAIXA POSTAL' || 
+      String(endedReason || '').toLowerCase().includes('voicemail') || 
+      String(tabulation || '').toUpperCase().includes('CAIXA') || 
+      String(tabulation || '').toUpperCase().includes('VOICEMAIL');
+
+    const isSuccess = !isVoicemail && (
+      isVapiAnsweredCall({ ...(call || {}), endedReason }, transcriptText, duration) ||
+      tabulationCode === 'HUMAN_COMPLETED' ||
+      tabulation === 'PROMESSA_DE_PAGAMENTO' ||
+      validCpcOccurrences.includes(occurrence) ||
+      occurrence.includes('ATENDEU') ||
+      occurrence.includes('LIGAÇÃO MUDA') ||
+      duration > 0
+    );
+
+    const callStatus = isSuccess ? 'completed' : 'failed';
+    const logText = `[VOICE] Chamada encerrada. Motivo: ${endedReason}. Duração: ${duration}s. Tabulação: ${tabulation || 'N/A'}`;
 
     // Atualizar o lead com o status, log, ocorrência, transcrição e áudio da ligação
     run(

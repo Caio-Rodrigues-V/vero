@@ -7,7 +7,9 @@ const validCpcOccurrences = [
   'CONFIRMOU CONTATO - ENVIO SMS',
   'PROMESSA DE PAGAMENTO - SMS ENVIADO',
   '2ª VIA BOLETO - SMS ENVIADO',
-  'ALEGA PAGAMENTO - SMS ENVIADO'
+  'ALEGA PAGAMENTO - SMS ENVIADO',
+  'ATENDEU E DESLIGOU',
+  'LIGAÇÃO MUDA'
 ];
 
 /**
@@ -55,12 +57,12 @@ function extractCustomerSpeech(transcript) {
  * tabulações Olos / DDM e VAPI/Retell.
  */
 function classifyCallOccurrence({ endedReason, summary, transcript, duration, tabulation, tabulationCode }) {
-  const reason = endedReason;
+  const reason = String(endedReason || '').toLowerCase();
   const dur = duration || 0;
-  const tab = (tabulation || '').toUpperCase().trim();
+  const tab = normalizeText(tabulation || '').toUpperCase().trim();
   const code = (tabulationCode || '').toUpperCase().trim();
 
-  // 1. Mapeamento direto de tabulações Dialog DDM / Olos
+  // 1. Mapeamento direto de tabulações Dialog DDM / Olos / Retell
   if (tab === 'PROMESSA_DE_PAGAMENTO' || tab.includes('PROMESSA')) {
     return 'PROMESSA DE PAGAMENTO - SMS ENVIADO';
   }
@@ -76,37 +78,68 @@ function classifyCallOccurrence({ endedReason, summary, transcript, duration, ta
   if (tab === 'RECUSA DE PAGAMENTO' || tab === 'RECUSA_DE_PAGAMENTO' || tab.includes('RECUSA')) {
     return 'RECUSA DE PAGAMENTO';
   }
-  if (tab === 'ATENDEU E DESLIGOU' || tab === 'ATENDEU_E_DESLIGOU' || code === 'CALL_DROPPED') {
+  if (
+    tab.includes('ATENDEU E DESLIGOU') || 
+    tab.includes('ATENDEU_E_DESLIGOU') || 
+    tab.includes('DESLIGOU') || 
+    tab.includes('DESLIGA') || 
+    code === 'CALL_DROPPED' ||
+    reason === 'customer-ended-call' ||
+    reason === 'user_hangup'
+  ) {
     return 'ATENDEU E DESLIGOU';
+  }
+  if (
+    tab.includes('LIGACAO_MUDA') || 
+    tab.includes('LIGACAO MUDA') || 
+    tab.includes('MUD') || 
+    tab.includes('SEM SOM') || 
+    tab.includes('SEM_SOM') || 
+    tab.includes('SILENCIO') || 
+    code === 'MUTE_SILENCE' || 
+    reason === 'silence-timed-out' || 
+    reason === 'silence'
+  ) {
+    return 'LIGAÇÃO MUDA';
   }
   if (tab === 'ENGANO' || tab === 'NUMERO_DE_ENGANO' || code === 'WRONG_NUMBER') {
     return 'NÚMERO DE ENGANO';
   }
-  if (tab === 'CAIXA_POSTAL' || tab.includes('CAIXA_POSTAL') || code === 'VOICEMAIL' || reason === 'voicemail') {
+  if (
+    tab === 'CAIXA_POSTAL' || 
+    tab.includes('CAIXA_POSTAL') || 
+    tab.includes('CAIXA POSTAL') || 
+    tab.includes('VOICEMAIL') || 
+    tab.includes('SECRETARIA') || 
+    code === 'VOICEMAIL' || 
+    reason.includes('voicemail')
+  ) {
     return 'CAIXA POSTAL';
   }
-  if (tab === 'LIGACAO_MUDA' || tab === 'LIGACAO_MUDA' || code === 'MUTE_SILENCE' || reason === 'silence-timed-out') {
-    return 'LIGAÇÃO MUDA';
-  }
 
-  // 2. Falhas e não atendimento da operadora
-  if (
-    reason === 'voicemail' || 
-    reason === 'no-answer' || 
-    reason === 'no_answer' || 
-    reason === 'customer-did-not-answer' ||
-    reason === 'busy' || 
-    reason === 'user_busy' ||
-    reason === 'customer-busy' ||
-    reason === 'network-error' || 
-    reason === 'error' || 
-    reason === 'dial_failed' ||
-    dur === 0
-  ) {
+  // 2. Falhas e não atendimento da operadora (quando duração é 0 e não houve conexão)
+  if (dur === 0) {
+    if (tab === 'NAO ATENDE' || tab === 'NAO_ATENDE' || tab.includes('NAO ATENDE')) {
+      return 'NÃO ATENDEU';
+    }
+    if (
+      reason === 'voicemail' || 
+      reason === 'no-answer' || 
+      reason === 'no_answer' || 
+      reason === 'customer-did-not-answer' ||
+      reason === 'busy' || 
+      reason === 'user_busy' ||
+      reason === 'customer-busy' ||
+      reason === 'network-error' || 
+      reason === 'error' || 
+      reason === 'dial_failed'
+    ) {
+      return 'NÃO ATENDEU';
+    }
     return 'NÃO ATENDEU';
   }
 
-  // 3. Qualquer chamada conectada/atendida padrão
+  // 3. Qualquer chamada com duração > 0 conectada/atendida padrão
   return 'ATENDEU - SMS ENVIADO';
 }
 
