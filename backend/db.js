@@ -30,11 +30,14 @@ const path = require('path');
 const dbPath = path.join(__dirname, 'vero_recovery.db');
 const db = new DatabaseSync(dbPath);
 
-// Habilitar WAL mode e busy_timeout para alta concorrência de escritas paralelas
+// Habilitar WAL mode, cache em memória e busy_timeout para alta concorrência e velocidade instantânea
 try {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA busy_timeout = 10000;');
   db.exec('PRAGMA synchronous = NORMAL;');
+  db.exec('PRAGMA cache_size = -64000;'); // 64MB cache de páginas
+  db.exec('PRAGMA mmap_size = 268435456;'); // 256MB memory mapping
+  db.exec('PRAGMA temp_store = MEMORY;');
 } catch (e) {
   console.warn('[DB PRAGMA WARN]', e.message);
 }
@@ -131,6 +134,24 @@ function initDb() {
   safeAddColumn('leads', 'recording_url TEXT');
   safeAddColumn('leads', 'created_at DATETIME');
   safeAddColumn('leads', 'updated_at DATETIME');
+
+  // 3. Criar Índices de Alta Performance para leitura instantânea de centenas de milhares de leads
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_leads_campaign_id ON leads(campaign_id);
+      CREATE INDEX IF NOT EXISTS idx_leads_call_status ON leads(call_status);
+      CREATE INDEX IF NOT EXISTS idx_leads_sms_status ON leads(sms_status);
+      CREATE INDEX IF NOT EXISTS idx_leads_occurrence ON leads(occurrence);
+      CREATE INDEX IF NOT EXISTS idx_leads_updated_at ON leads(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
+      CREATE INDEX IF NOT EXISTS idx_leads_camp_call_status ON leads(campaign_id, call_status);
+      CREATE INDEX IF NOT EXISTS idx_leads_camp_sms_status ON leads(campaign_id, sms_status);
+      CREATE INDEX IF NOT EXISTS idx_campaigns_created_at ON campaigns(created_at);
+      CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
+    `);
+  } catch (e) {
+    console.warn('[DB INDEX WARN]', e.message);
+  }
 
   // Garantir que registros existentes sem created_at/updated_at fiquem preenchidos com o timestamp atual
   try {

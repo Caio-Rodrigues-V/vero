@@ -73,8 +73,6 @@ function recalculateActiveCampaigns() {
 app.get('/api/dashboard/stats', (req, res) => {
   const { campaignId, date } = req.query;
   try {
-    recalculateActiveCampaigns();
-
     if (date && date !== 'all') {
       let query = `
         SELECT 

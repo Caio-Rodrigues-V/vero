@@ -364,26 +364,30 @@ export default function App() {
     }
   };
 
-  // Auto-refresh contínuo do dashboard a cada 3 segundos preservando filtros e busca
+  // Auto-refresh contínuo inteligente e leve
   useEffect(() => {
     fetchStats(selectedCampaignId, selectedDate);
     fetchCampaigns();
     fetchOccurrences(selectedCampaignId, selectedDate);
     fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
     fetchAvailableDates(selectedCampaignId);
-    fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
+    if (activeTab === 'leads') {
+      fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
+    }
 
     const interval = setInterval(() => {
       fetchStats(selectedCampaignId, selectedDate);
       fetchCampaigns();
-      fetchOccurrences(selectedCampaignId, selectedDate);
-      fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
-      fetchAvailableDates(selectedCampaignId);
-      fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
-    }, 3000);
+      if (activeTab === 'dashboard') {
+        fetchOccurrences(selectedCampaignId, selectedDate);
+        fetchHourlyStats(selectedCampaignId, startHour, endHour, selectedDate);
+      } else if (activeTab === 'leads') {
+        fetchLeads(selectedCampaignId, leadsPageRef.current, statusFilterRef.current, searchTermRef.current);
+      }
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, [selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour, selectedDate]);
+  }, [activeTab, selectedCampaignId, leadsPage, statusFilter, searchTerm, startHour, endHour, selectedDate]);
 
   const fetchStats = async (campaignId: number | 'all' = selectedCampaignId, dt: string = selectedDate) => {
     try {
